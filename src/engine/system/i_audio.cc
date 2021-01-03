@@ -1020,7 +1020,30 @@ static const std::array<StringView, 117> audio_lumps_ {{
     "SNDRCDIE", "SNDRCPN", "SNDRCSIT", "MUSAMB01", "MUSAMB02", "MUSAMB03", "MUSAMB04", "MUSAMB05", "MUSAMB06",
     "MUSAMB07", "MUSAMB08", "MUSAMB09", "MUSAMB10", "MUSAMB11", "MUSAMB12", "MUSAMB13", "MUSAMB14", "MUSAMB15",
     "MUSAMB16", "MUSAMB17", "MUSAMB18", "MUSAMB19", "MUSAMB20", "MUSFINAL", "MUSDONE", "MUSINTRO", "MUSTITLE" }};
-
+// Bethesda Rerelease support
+/*
+static const std::array<StringView, 117> audio_lumps_ {{
+    "NOSOUND", "SFX033", 
+    "SFX034", "SFX035", "SFX036", "SFX037", "SFX038", "SFX039",
+    "SFX040", "SFX041", "SFX042", "SFX043", "SFX044", "SFX045",
+    "SFX046", "SFX047", "SFX048", "SFX049", "SFX050", "SFX051",
+    "SFX052", "SFX053", "SFX054", "SFX055", "SFX056", "SFX057",
+    "SFX058", "SFX059", "SFX060", "SFX061", "SFX062", "SFX063",
+    "SFX064", "SFX065", "SFX066", "SFX067", "SFX068", "SFX069",
+    "SFX070", "SFX071", "SFX072", "SFX073", "SFX074", "SFX075",
+    "SFX076", "SFX077", "SFX078", "SFX079", "SFX080", "SFX081",
+    "SFX082", "SFX083", "SFX084", "SFX085", "SFX086", "SFX087",
+    "SFX088", "SFX089", "SFX090", "SFX091", "SFX092", "SFX093",
+    "SFX094", "SFX095", "SFX096", "SFX097", "SFX098", "SFX099",
+    "SFX100", "SFX101", "SFX102", "SFX103", "SFX104", "SFX105",
+    "SFX106", "SFX107", "SFX108", "SFX109", "SFX110", "SFX111",
+    "SFX112", "SFX113", "SFX114", "SFX115", "SFX116", "SFX117",
+    "SFX118", "SFX119", "SFX120", "SFX121", "SFX122", "SFX123", "SFX0124",
+    "MUSAMB01", "MUSAMB02", "MUSAMB03", "MUSAMB04", "MUSAMB05", "MUSAMB06",
+    "MUSAMB07", "MUSAMB08", "MUSAMB09", "MUSAMB10", "MUSAMB11", "MUSAMB12",
+    "MUSAMB13", "MUSAMB14", "MUSAMB15", "MUSAMB16", "MUSAMB17", "MUSAMB18",
+    "MUSAMB19", "MUSAMB20", "MUSFINAL", "MUSDONE", "MUSINTRO", "MUSTITLE" }};
+*/
 size_t Seq_SoundLookup(StringView name) {
     return std::distance(audio_lumps_.begin(), std::find(audio_lumps_.begin(), audio_lumps_.end(), name));
 }
