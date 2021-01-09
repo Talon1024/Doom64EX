@@ -3,3 +3,4 @@ animdefs.txt
 mapinfo.txt
 palplay3.act
 skydefs.txt
+sndtable.txt
