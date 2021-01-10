@@ -1961,7 +1961,7 @@ menu_t VideoDef = {
     0,
     false,
     VideoDefault,
-    12,
+    11,
     0,
     0.65f,
     NULL,
@@ -1993,7 +1993,7 @@ static char gammamsg[21][28] = {
 };
 
 void M_Video(int choice) {
-    int i;
+    // int i;
 
     M_SetupNextMenu(&VideoDef);
 
