@@ -1045,22 +1045,23 @@ static const std::array<StringView, 117> audio_lumps_ {{
     "MUSAMB19", "MUSAMB20", "MUSFINAL", "MUSDONE", "MUSINTRO", "MUSTITLE" }};
 */
 
-static std::vector<String> snd_names; // TODO: hash map
+typedef enum {
+    FORMAT_UNKNOWN,
+    FORMAT_MIDI,
+    FORMAT_WAV
+} sndformat_e;
 
-size_t Seq_SoundLookup(StringView name) {
+static std::vector<String> snd_names; // TODO: hash map
+static std::vector<sndformat_e> snd_fmts; // TODO: hash map
+
+size_t Seq_SoundLookup(String name) {
     return std::distance(snd_names.begin(), std::find(snd_names.begin(), snd_names.end(), name));
 }
 
-static bool Seq_RegisterSongs(doomseq_t* seq) {
-    /*
-    typedef enum {
-        FORMAT_UNKNOWN,
-        FORMAT_MIDI,
-        FORMAT_WAV
-    } sndformat_e;
-    */
-    // Parse the sound table lump
-    std::vector< std::vector<StringView> > audio_lumps_{};
+bool Audio_LoadTable() {
+    // Parse the sound table lump and populate snd_names 
+    std::vector< std::vector<StringView> > audio_lumps{};
+    char* snddata;
     {
         auto sndtable_lump = wad::find("SNDTABLE");
         if (!sndtable_lump) {
@@ -1069,7 +1070,7 @@ static bool Seq_RegisterSongs(doomseq_t* seq) {
         }
         String sndtable = sndtable_lump->as_bytes();
         uint32_t end = sndtable.size();
-        char* snddata = new char[end+1];
+        snddata = new char[end+1];
         sndtable.copy(snddata, end);
         snddata[end] = 0;
         uint32_t pos = 0;
@@ -1085,7 +1086,7 @@ static bool Seq_RegisterSongs(doomseq_t* seq) {
                 }
                 // Line break - add a new entry to the audio lump list
                 if (snddata[pos] == '\n') {
-                    audio_lumps_.push_back(alternatives);
+                    audio_lumps.push_back(alternatives);
                     alternatives = std::vector<StringView>{};
                     keep_parsing = true;
                 }
@@ -1099,69 +1100,84 @@ static bool Seq_RegisterSongs(doomseq_t* seq) {
             pos++;
         }
     }
+    size_t entry_index = 0;
+    for (auto entry : audio_lumps) {
+        size_t loaded = 0;
+        for (auto name : entry) {
+            auto lump = wad::find(name);
+            if (lump && lump->section() == wad::Section::sounds) {
+                snd_names.push_back(name.to_string());
+                // Get format
+                String data = lump->as_bytes();
+                if (dstrncmp(data.c_str(), "RIFF", 4) == 0) {
+                    snd_fmts.push_back(FORMAT_WAV);
+                } else if (dstrncmp(data.c_str(), "MThd", 4) == 0) {
+                    snd_fmts.push_back(FORMAT_MIDI);
+                } else {
+                    snd_fmts.push_back(FORMAT_UNKNOWN);
+                }
+                loaded += 1;
+                break;
+            }
+        }
+        if (!loaded) {
+            I_Printf("Failed to register entry %u!", entry_index);
+        }
+        entry_index++;
+    }
+    delete [] snddata;
+    return true;
+}
 
-    seq->nsongs = audio_lumps_.size();
+static bool Seq_RegisterSongs(doomseq_t* seq) {
+    seq->nsongs = snd_names.size();
 
     seq->songs = (song_t*)Z_Calloc(seq->nsongs * sizeof(song_t), PU_STATIC, 0);
 
     size_t fail {};
     size_t i {};
-    size_t entry_index = 0;
-    for(auto entry : audio_lumps_) {
-        size_t loaded = 0;
-        for(auto name : entry) {
-            auto opt = wad::find(name);
+    for(auto name : snd_names) {
+        auto opt = wad::find(StringView(name));
 
-            if (!opt || opt->section() != wad::Section::sounds)
-            {
-                continue;
-            }
-
-            // TODO: Differentiate between MIDI and WAV - the Doom 64 rerelease uses WAVs.
-            if (dstrncmp(opt->bytes_ptr(), "RIFF", 4) == 0)
-            {
-                // It's a WAV file!
-                continue;
-            }
-            auto& lump = *opt;
-            song_t* song;
-
-            auto bytes = lump.as_bytes();
-            auto memory = new char[bytes.size()];
-            std::copy(bytes.begin(), bytes.end(), memory);
-            song = &seq->songs[i++];
-            song->data = (byte*) memory;
-            song->length = bytes.size();
-
-            if(!song->length) {
-                // "Song" is nothing, but accept it anyway
-                loaded += 1;
-                break;
-            }
-
-            dmemcpy(song, song->data, 0x0e);
-            if(dstrncmp(song->header, "MThd", 4)) {
-                continue;
-            }
-
-            song->chunksize = I_SwapBE32(song->chunksize);
-            song->ntracks   = I_SwapBE16(song->ntracks);
-            song->delta     = I_SwapBE16(song->delta);
-            song->type      = I_SwapBE16(song->type);
-            song->timediv   = Song_GetTimeDivision(song);
-            song->tempo     = 480000;
-
-            if(!Song_RegisterTracks(song)) {
-                continue;
-            }
-            loaded += 1;
-        }
-        if (!loaded)
-        {
-            I_Printf("Could not load entry %d!\n", entry_index);
+        if (!opt || opt->section() != wad::Section::sounds) {
             fail++;
+            continue;
         }
-        entry_index++;
+
+        // TODO: Differentiate between MIDI and WAV - the Doom 64 rerelease uses WAVs.
+        auto& lump = *opt;
+        song_t* song;
+
+        auto bytes = lump.as_bytes();
+        auto memory = new char[bytes.size()];
+        std::copy(bytes.begin(), bytes.end(), memory);
+        song = &seq->songs[i++];
+        song->data = (byte*) memory;
+        song->length = bytes.size();
+
+        if(!song->length) {
+            // "Song" is nothing, but accept it anyway
+            continue;
+        }
+
+        dmemcpy(song, song->data, 0x0e);
+        if(dstrncmp(song->header, "MThd", 4)) {
+            // NOT a MIDI file
+            fail++;
+            continue;
+        }
+
+        song->chunksize = I_SwapBE32(song->chunksize);
+        song->ntracks   = I_SwapBE16(song->ntracks);
+        song->delta     = I_SwapBE16(song->delta);
+        song->type      = I_SwapBE16(song->type);
+        song->timediv   = Song_GetTimeDivision(song);
+        song->tempo     = 480000;
+
+        if(!Song_RegisterTracks(song)) {
+            fail++;
+            continue;
+        }
     }
 
     if (fail) {

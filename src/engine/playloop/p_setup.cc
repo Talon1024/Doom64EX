@@ -1125,7 +1125,7 @@ static scdatatable_t clusterdatatable[] = {
 };
 
 // from audio.cc
-size_t Seq_SoundLookup(StringView name);
+size_t Seq_SoundLookup(String name);
 
 static void P_InitMapInfo(void) {
     mapdef_t mapdef;
@@ -1191,7 +1191,8 @@ static void P_InitMapInfo(void) {
                             mapdef.music = -1;
                         }
                         else {
-                            mapdef.music = Seq_SoundLookup(lump->lump_name());
+                            mapdef.music = Seq_SoundLookup(lump->lump_name().to_string());
+                            I_Printf("Map music %s: %d\n", lump->lump_name().to_string().c_str(), mapdef.music);
                         }
                     }
                     else if(!dstricmp(sc_parser.token, "COMPAT_COLLISION")) {
@@ -1271,7 +1272,8 @@ static void P_InitMapInfo(void) {
                             CON_Warnf("P_InitMapInfo: Invalid music name: %s\n", text);
                             cluster.music = -1;
                         } else {
-                            cluster.music = Seq_SoundLookup(lump->lump_name());
+                            cluster.music = Seq_SoundLookup(lump->lump_name().to_string());
+                            I_Printf("Cluster music %s: %d\n", lump->lump_name().to_string().c_str(), cluster.music);
                         }
                     }
                     //

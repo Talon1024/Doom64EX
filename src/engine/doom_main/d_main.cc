@@ -114,6 +114,8 @@ void D_CheckNetGame(void);
 void D_ProcessEvents(void);
 void G_BuildTiccmd(ticcmd_t* cmd);
 
+bool Audio_LoadTable();
+
 #define STRPAUSED    "Paused"
 
 extern BoolProperty sv_nomonsters;
@@ -1007,6 +1009,9 @@ void D_DoomMain(void) {
 
     I_Printf("R_Init: Init DOOM refresh daemon.\n");
     R_Init();
+
+    I_Printf("Loading SNDTABLE.\n");
+    Audio_LoadTable();
 
     I_Printf("P_Init: Init Playloop state.\n");
     P_Init();
