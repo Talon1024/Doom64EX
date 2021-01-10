@@ -1005,6 +1005,7 @@ static dboolean Song_RegisterTracks(song_t* song) {
 // Allocate data for all midi songs
 //
 
+/*
 // Doom64EX expects audio to be loaded in this order since the sound indices are hardcoded in info.cc
 static const std::array<StringView, 117> audio_lumps_ {{
     "NOSOUND", "SNDPUNCH", "SNDSPAWN", "SNDEXPLD", "SNDIMPCT", "SNDPSTOL", "SNDSHTGN", "SNDPLSMA", "SNDBFG",
@@ -1021,7 +1022,6 @@ static const std::array<StringView, 117> audio_lumps_ {{
     "MUSAMB07", "MUSAMB08", "MUSAMB09", "MUSAMB10", "MUSAMB11", "MUSAMB12", "MUSAMB13", "MUSAMB14", "MUSAMB15",
     "MUSAMB16", "MUSAMB17", "MUSAMB18", "MUSAMB19", "MUSAMB20", "MUSFINAL", "MUSDONE", "MUSINTRO", "MUSTITLE" }};
 // Bethesda Rerelease support
-/*
 static const std::array<StringView, 117> audio_lumps_ {{
     "NOSOUND", "SFX033", 
     "SFX034", "SFX035", "SFX036", "SFX037", "SFX038", "SFX039",
@@ -1044,60 +1044,128 @@ static const std::array<StringView, 117> audio_lumps_ {{
     "MUSAMB13", "MUSAMB14", "MUSAMB15", "MUSAMB16", "MUSAMB17", "MUSAMB18",
     "MUSAMB19", "MUSAMB20", "MUSFINAL", "MUSDONE", "MUSINTRO", "MUSTITLE" }};
 */
+
+static std::vector<String> snd_names; // TODO: hash map
+
 size_t Seq_SoundLookup(StringView name) {
-    return std::distance(audio_lumps_.begin(), std::find(audio_lumps_.begin(), audio_lumps_.end(), name));
+    return std::distance(snd_names.begin(), std::find(snd_names.begin(), snd_names.end(), name));
 }
 
 static bool Seq_RegisterSongs(doomseq_t* seq) {
+    /*
+    typedef enum {
+        FORMAT_UNKNOWN,
+        FORMAT_MIDI,
+        FORMAT_WAV
+    } sndformat_e;
+    */
+    // Parse the sound table lump
+    std::vector< std::vector<StringView> > audio_lumps_{};
+    {
+        auto sndtable_lump = wad::find("SNDTABLE");
+        if (!sndtable_lump) {
+            I_Printf("Cannot find sound table!");
+            return false;
+        }
+        String sndtable = sndtable_lump->as_bytes();
+        uint32_t end = sndtable.size();
+        char* snddata = new char[end+1];
+        sndtable.copy(snddata, end);
+        snddata[end] = 0;
+        uint32_t pos = 0;
+        uint32_t str_length = 0;
+        bool keep_parsing = true;
+        std::vector<StringView> alternatives;
+        while (pos < end) {
+            if (isspace(snddata[pos])) {
+                // Add the lump name to the list of alternatives
+                if (str_length > 0) {
+                    StringView sndname(snddata + pos - str_length, str_length);
+                    alternatives.push_back(sndname);
+                }
+                // Line break - add a new entry to the audio lump list
+                if (snddata[pos] == '\n') {
+                    audio_lumps_.push_back(alternatives);
+                    alternatives = std::vector<StringView>{};
+                    keep_parsing = true;
+                }
+                str_length = 0;
+            } else if (snddata[pos] == '/' && snddata[pos+1] == '/') {
+                // line comment
+                keep_parsing = false;
+            } else if (keep_parsing) {
+                str_length++;
+            }
+            pos++;
+        }
+    }
+
     seq->nsongs = audio_lumps_.size();
 
     seq->songs = (song_t*)Z_Calloc(seq->nsongs * sizeof(song_t), PU_STATIC, 0);
 
     size_t fail {};
     size_t i {};
-    for(auto name : audio_lumps_) {
-        auto opt = wad::find(name);
+    size_t entry_index = 0;
+    for(auto entry : audio_lumps_) {
+        size_t loaded = 0;
+        for(auto name : entry) {
+            auto opt = wad::find(name);
 
-        if (!opt || opt->section() != wad::Section::sounds) {
+            if (!opt || opt->section() != wad::Section::sounds)
+            {
+                continue;
+            }
+
+            // TODO: Differentiate between MIDI and WAV - the Doom 64 rerelease uses WAVs.
+            if (dstrncmp(opt->bytes_ptr(), "RIFF", 4) == 0)
+            {
+                // It's a WAV file!
+                continue;
+            }
+            auto& lump = *opt;
+            song_t* song;
+
+            auto bytes = lump.as_bytes();
+            auto memory = new char[bytes.size()];
+            std::copy(bytes.begin(), bytes.end(), memory);
+            song = &seq->songs[i++];
+            song->data = (byte*) memory;
+            song->length = bytes.size();
+
+            if(!song->length) {
+                // "Song" is nothing, but accept it anyway
+                loaded += 1;
+                break;
+            }
+
+            dmemcpy(song, song->data, 0x0e);
+            if(dstrncmp(song->header, "MThd", 4)) {
+                continue;
+            }
+
+            song->chunksize = I_SwapBE32(song->chunksize);
+            song->ntracks   = I_SwapBE16(song->ntracks);
+            song->delta     = I_SwapBE16(song->delta);
+            song->type      = I_SwapBE16(song->type);
+            song->timediv   = Song_GetTimeDivision(song);
+            song->tempo     = 480000;
+
+            if(!Song_RegisterTracks(song)) {
+                continue;
+            }
+            loaded += 1;
+        }
+        if (!loaded)
+        {
+            I_Printf("Could not load entry %d!\n", entry_index);
             fail++;
-            continue;
         }
-
-        auto& lump = *opt;
-        song_t* song;
-
-        auto bytes = lump.as_bytes();
-        auto memory = new char[bytes.size()];
-        std::copy(bytes.begin(), bytes.end(), memory);
-        song = &seq->songs[i++];
-        song->data = (byte*) memory;
-        song->length = bytes.size();
-
-        if(!song->length) {
-            continue;
-        }
-
-        dmemcpy(song, song->data, 0x0e);
-        if(dstrncmp(song->header, "MThd", 4)) {
-            fail++;
-            continue;
-        }
-
-        song->chunksize = I_SwapBE32(song->chunksize);
-        song->ntracks   = I_SwapBE16(song->ntracks);
-        song->delta     = I_SwapBE16(song->delta);
-        song->type      = I_SwapBE16(song->type);
-        song->timediv   = Song_GetTimeDivision(song);
-        song->tempo     = 480000;
-
-        if(!Song_RegisterTracks(song)) {
-            fail++;
-            continue;
-        }
+        entry_index++;
     }
 
     if (fail) {
-        I_Printf("Failed to load %d MIDI tracks.\n", fail);
+        I_Printf("Failed to load %d audio files.\n", fail);
     }
 
     return true;
