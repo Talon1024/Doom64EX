@@ -1051,11 +1051,20 @@ typedef enum {
     FORMAT_WAV
 } sndformat_e;
 
-static std::vector<String> snd_names; // TODO: hash map
-static std::vector<sndformat_e> snd_fmts; // TODO: hash map
+typedef struct {
+    String name;
+    sndformat_e format;
+} audioinfo_t;
+
+static std::vector<audioinfo_t> snd_entries; // TODO: hash map
 
 size_t Seq_SoundLookup(String name) {
-    return std::distance(snd_names.begin(), std::find(snd_names.begin(), snd_names.end(), name));
+    for (int i = 0; i < snd_entries.size(); i++) {
+        if (snd_entries[i].name == name) {
+            return i;
+        }
+    }
+    return 0;
 }
 
 bool Audio_LoadTable() {
@@ -1083,11 +1092,13 @@ bool Audio_LoadTable() {
                 if (str_length > 0) {
                     StringView sndname(snddata + pos - str_length, str_length);
                     alternatives.push_back(sndname);
+                    // Line break - add a new entry to the audio lump list
+                    if (snddata[pos] == '\n') {
+                        audio_lumps.push_back(alternatives);
+                        alternatives = std::vector<StringView>{};
+                    }
                 }
-                // Line break - add a new entry to the audio lump list
                 if (snddata[pos] == '\n') {
-                    audio_lumps.push_back(alternatives);
-                    alternatives = std::vector<StringView>{};
                     keep_parsing = true;
                 }
                 str_length = 0;
@@ -1106,17 +1117,20 @@ bool Audio_LoadTable() {
         for (auto name : entry) {
             auto lump = wad::find(name);
             if (lump && lump->section() == wad::Section::sounds) {
-                snd_names.push_back(name.to_string());
+                audioinfo_t audioinfo {};
+                audioinfo.name = name.to_string();
                 // Get format
                 String data = lump->as_bytes();
                 if (dstrncmp(data.c_str(), "RIFF", 4) == 0) {
-                    snd_fmts.push_back(FORMAT_WAV);
+                    audioinfo.format = FORMAT_WAV;
+                    loaded += 1;
                 } else if (dstrncmp(data.c_str(), "MThd", 4) == 0) {
-                    snd_fmts.push_back(FORMAT_MIDI);
+                    audioinfo.format = FORMAT_MIDI;
+                    loaded += 1;
                 } else {
-                    snd_fmts.push_back(FORMAT_UNKNOWN);
+                    audioinfo.format = FORMAT_UNKNOWN;
                 }
-                loaded += 1;
+                snd_entries.push_back(audioinfo);
                 break;
             }
         }
@@ -1130,14 +1144,14 @@ bool Audio_LoadTable() {
 }
 
 static bool Seq_RegisterSongs(doomseq_t* seq) {
-    seq->nsongs = snd_names.size();
+    seq->nsongs = snd_entries.size();
 
     seq->songs = (song_t*)Z_Calloc(seq->nsongs * sizeof(song_t), PU_STATIC, 0);
 
     size_t fail {};
     size_t i {};
-    for(auto name : snd_names) {
-        auto opt = wad::find(StringView(name));
+    for(auto entry : snd_entries) {
+        auto opt = wad::find(StringView(entry.name));
 
         if (!opt || opt->section() != wad::Section::sounds) {
             fail++;
