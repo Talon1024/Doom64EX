@@ -1010,9 +1010,6 @@ void D_DoomMain(void) {
     I_Printf("R_Init: Init DOOM refresh daemon.\n");
     R_Init();
 
-    I_Printf("Loading SNDTABLE.\n");
-    Audio_LoadTable();
-
     I_Printf("P_Init: Init Playloop state.\n");
     P_Init();
 
@@ -1020,6 +1017,7 @@ void D_DoomMain(void) {
     NET_Init();
 
     I_Printf("S_Init: Setting up sound.\n");
+    Audio_LoadTable();
     S_Init();
 
     I_Printf("D_CheckNetGame: Checking network game status.\n");

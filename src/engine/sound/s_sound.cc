@@ -157,12 +157,29 @@ void S_SetGainOutput(float db) {
 // S_StartMusic
 //
 
+// Old version which uses a lump index
 void S_StartMusic(int mnum) {
     if(nomusic) {
         return;
     }
 
     if(mnum <= -1) {
+        return;
+    }
+
+    I_StartMusic(mnum);
+    lastmusic = mnum;
+}
+
+size_t Seq_SoundLookup(String name);
+
+void S_StartMusic(const char* name) {
+    if(nomusic) {
+        return;
+    }
+
+    size_t mnum = Seq_SoundLookup(String(name));
+    if (!mnum) {
         return;
     }
 

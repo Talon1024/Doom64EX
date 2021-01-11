@@ -179,7 +179,7 @@ extern  gamestate_t gamestate;
 typedef struct {
     char        mapname[64];
     int         mapid;
-    int         music;
+    char        music[8];
     int         type;
     int         cluster;
     int         exitdelay;
@@ -194,7 +194,7 @@ typedef struct {
 
 typedef struct {
     int         id;
-    int         music;
+    char        music[8];
     dboolean    enteronly;
     short       pic_x;
     short       pic_y;
