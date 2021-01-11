@@ -1,4 +1,9 @@
+// Blank WAV/MIDI
 NOSOUND
+
+// Ingame sounds
+// Note that multiple sound lump names are listed on each line here.
+// Doom 64 EX will "pick" the first sound that loads successfully.
 SNDPUNCH SFX_033
 SNDSPAWN SFX_034
 SNDEXPLD SFX_035
@@ -91,6 +96,8 @@ SNDRCATK SFX_121
 SNDRCDIE SFX_122
 SNDRCPN SFX_123
 SNDRCSIT SFX_0124
+
+// "Music" tracks
 MUSAMB01
 MUSAMB02
 MUSAMB03
