@@ -1059,7 +1059,7 @@ typedef struct {
 static std::vector<audioinfo_t> snd_entries; // TODO: hash map
 
 size_t Seq_SoundLookup(String name) {
-    for (int i = 0; i < snd_entries.size(); i++) {
+    for (size_t i = 0; i < snd_entries.size(); i++) {
         if (snd_entries[i].name == name) {
             return i;
         }
@@ -1116,11 +1116,12 @@ bool Audio_LoadTable() {
         size_t loaded = 0;
         for (auto name : entry) {
             auto lump = wad::find(name);
+            audioinfo_t audioinfo {};
             if (lump && lump->section() == wad::Section::sounds) {
-                audioinfo_t audioinfo {};
                 audioinfo.name = name.to_string();
                 // Get format
                 String data = lump->as_bytes();
+                // TODO: Integrate SDL_Mixer?
                 if (dstrncmp(data.c_str(), "RIFF", 4) == 0) {
                     audioinfo.format = FORMAT_WAV;
                     loaded += 1;
@@ -1130,6 +1131,8 @@ bool Audio_LoadTable() {
                 } else {
                     audioinfo.format = FORMAT_UNKNOWN;
                 }
+            }
+            if (loaded) {
                 snd_entries.push_back(audioinfo);
                 break;
             }
