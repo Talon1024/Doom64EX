@@ -208,7 +208,7 @@ bool IN_Ticker(void) {
 
         if(!fcluster->enteronly) {
             fstopmusic = false;
-            return ga_finale;
+            gameaction = ga_finale;
         }
 
         return 1;
