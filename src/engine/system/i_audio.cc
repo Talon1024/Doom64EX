@@ -1074,7 +1074,7 @@ bool Audio_LoadTable() {
     {
         auto sndtable_lump = wad::find("SNDTABLE");
         if (!sndtable_lump) {
-            I_Printf("Cannot find sound table!");
+            I_Printf("Cannot find sound table!\n");
             return false;
         }
         String sndtable = sndtable_lump->as_bytes();
@@ -1092,13 +1092,13 @@ bool Audio_LoadTable() {
                 if (str_length > 0) {
                     StringView sndname(snddata + pos - str_length, str_length);
                     alternatives.push_back(sndname);
+                }
+                if (snddata[pos] == '\n') {
                     // Line break - add a new entry to the audio lump list
-                    if (snddata[pos] == '\n') {
+                    if (alternatives.size()) {
                         audio_lumps.push_back(alternatives);
                         alternatives = std::vector<StringView>{};
                     }
-                }
-                if (snddata[pos] == '\n') {
                     keep_parsing = true;
                 }
                 str_length = 0;
@@ -1138,10 +1138,11 @@ bool Audio_LoadTable() {
             }
         }
         if (!loaded) {
-            I_Printf("Failed to register entry %u!", entry_index);
+            I_Printf("Failed to register entry %u!\n", entry_index);
         }
         entry_index++;
     }
+    I_Printf("Found %u sounds.\n", snd_entries.size());
     delete [] snddata;
     return true;
 }
