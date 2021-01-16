@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cassert>
 #include "WadFormat.hh"
+#include "m_misc.h"
 
 namespace {
   wad::Format::loader loaders_[] {
@@ -68,6 +69,15 @@ void wad::init()
         }
     } else {
         fatal("Could not find doom64ex.pk3");
+    }
+
+    int pwadStart = M_CheckParm("-file");
+    for (int i = pwadStart + 1; i < myargc; i++) {
+        if (pwadStart && myargv[i] && myargv[i][0] != '-') {
+            if (!wad::mount(myargv[i])) {
+                println("Could not find {}", myargv[i]);
+            }
+        }
     }
 
     wad::merge();
