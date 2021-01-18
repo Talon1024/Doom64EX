@@ -29,6 +29,7 @@
 
 
 #include <algorithm>
+#include <bits/stdint-uintn.h>
 #include <iterator>
 #include <map>
 #include <utility>
@@ -65,12 +66,13 @@ static size_t channels_in_use = 0;
 struct sndsrcinfo_t {
     sndsrc_t* source;
     size_t channel;
+    uint8_t refcount;
 };
 
 struct musicinfo_t {
     Mix_Music* music;
     size_t id;
-    bool freed;
+    uint8_t refcount;
 };
 
 typedef std::variant<sndsrc_t*, size_t> sourceref;
@@ -165,7 +167,7 @@ static bool Audio_LoadTable() {
             SDL_RWops* reader = SDL_RWFromConstMem(data.data(), data.size());
             Mix_Music* music = Mix_LoadMUS_RW(reader, 1);
             size_t mus_id = musics.size();
-            musicinfo_t* info = new musicinfo_t {music, mus_id};
+            musicinfo_t* info = new musicinfo_t {music, mus_id, 2};
             musics.insert_or_assign(iter->lump_name().to_string(), info);
             musics.insert_or_assign(mus_id, info);
             loaded += 1;
@@ -177,7 +179,7 @@ static bool Audio_LoadTable() {
             SDL_RWops* reader = SDL_RWFromConstMem(data.data(), data.size());
             Mix_Music* music = Mix_LoadMUS_RW(reader, 1);
             size_t mus_id = musics.size();
-            musicinfo_t* info = new musicinfo_t {music, mus_id};
+            musicinfo_t* info = new musicinfo_t {music, mus_id, 2};
             musics.insert_or_assign(iter->lump_name().to_string(), info);
             musics.insert_or_assign(mus_id, info);
         }
@@ -276,8 +278,8 @@ void I_UpdateChannel(int c, int volume, int pan) {
     chan->pan       = (byte)(pan >> 1);
     */
     I_Printf("Updating channel %d\n", c);
-    Uint8 leftPan = pan;
-    Uint8 rightPan = 255 - pan;
+    Uint8 leftPan = 255 - pan;
+    Uint8 rightPan = pan;
     Mix_Volume(c, volume);
     Mix_SetPanning(c, leftPan, rightPan);
 }
@@ -289,14 +291,11 @@ void I_UpdateChannel(int c, int volume, int pan) {
 void I_ShutdownSound(void) {
     std::for_each(audio_chunks.begin(), audio_chunks.end(), Mix_FreeChunk);
     std::for_each(musics.begin(), musics.end(), [](std::pair<audioref, musicinfo_t*> ref) {
-        if (!ref.second->freed) {
+        ref.second->refcount -= 1;
+        if (ref.second->refcount == 0) {
             Mix_FreeMusic(ref.second->music);
-        } else {
-            // exploit double reference to free the info
             delete ref.second;
-            return;
         }
-        ref.second->freed = true;
     });
     Mix_CloseAudio();
 }
@@ -327,6 +326,12 @@ void I_SetSoundVolume(float volume) {
 
 void I_ResetSound(void) {
     channels_in_use = 0;
+    for (auto source : sources) {
+        source.second->refcount -= 1;
+        if (source.second->refcount == 0) {
+            delete source.second;
+        }
+    }
     sources.clear();
     return;
 }
@@ -381,6 +386,10 @@ void I_StopSound(sndsrc_t* origin, int sfx_id) {
             Mix_Chunk* chunk = Mix_GetChunk(channel);
             if (chunk == audio_chunks[sfx_id]) {
                 Mix_HaltChannel(channel);
+                sources[channel]->refcount -= 1;
+                if (sources[channel]->refcount == 0) {
+                    delete sources[channel];
+                }
                 sources.erase(channel);
                 channels_stopped++;
             }
@@ -393,6 +402,10 @@ void I_StopSound(sndsrc_t* origin, int sfx_id) {
         auto source = sources.find(origin);
         if (source != sources.end()) {
             Mix_HaltChannel(source->second->channel);
+            sources[origin]->refcount -= 1;
+            if (sources[origin]->refcount == 0) {
+                delete sources[origin];
+            }
             sources.erase(origin);
         }
         channels_stopped++;
@@ -414,13 +427,13 @@ void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb)
     size_t chunk_index = chuck->second;
     Mix_Chunk* chunk = audio_chunks[chunk_index];
     size_t curChannel = ++channels_in_use;
-    Uint8 leftPan = pan;
-    Uint8 rightPan = 255 - pan;
+    Uint8 leftPan = 255 - pan;
+    Uint8 rightPan = pan;
     Mix_Volume(curChannel, volume);
     Mix_SetPanning(curChannel, leftPan, rightPan);
     Mix_PlayChannel(curChannel, chunk, 0);
     if (origin) {
-        sndsrcinfo_t* info = new sndsrcinfo_t {origin, curChannel};
+        sndsrcinfo_t* info = new sndsrcinfo_t {origin, curChannel, 2};
         sources.insert_or_assign(curChannel, info);
         sources.insert_or_assign(origin, info);
     }
