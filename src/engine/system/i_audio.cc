@@ -28,11 +28,16 @@
 //-----------------------------------------------------------------------------
 
 
+#include <algorithm>
+#include <iterator>
 #include <map>
 #include <utility>
 
 #include "SDL.h"
 
+#include "SDL_audio.h"
+#include "SDL_error.h"
+#include "SDL_rwops.h"
 #include "doomtype.h"
 #include "doomdef.h"
 #include "con_console.h"    // for cvars
@@ -41,16 +46,22 @@
 
 #include "SDL_mixer.h"
 #include "i_audio.h"
+#include "imp/Property"
 
 // 20120203 villsa - cvar for soundfont location
-StringProperty s_soundfont("s_soundfont", "doomsnd.sf2 location", "doomsnd.sf2"_sv);
+StringProperty s_soundfont("s_soundfont", "Soundfont location", "doomsnd.sf2"_sv);
+IntProperty s_rate("s_rate", "Audio sample rate", 22050);
+IntProperty s_format("s_format", "Audio format", AUDIO_S16LSB);
+IntProperty s_channels("s_channels", "Channels", 2);
 
 // 20210117 rewrite - Talon1024
 
 static size_t channels_in_use = 0;
 
 static std::map<String, size_t> snd_entries;
-static std::map<sndsrc_t*, size_t> source_indices;
+static std::vector<Mix_Chunk*> audio_chunks;
+static std::vector<Mix_Music*> musics;
+static std::vector<size_t> channels;
 static std::vector<sndsrc_t*> sources;
 
 size_t Seq_SoundLookup(String name) {
@@ -62,9 +73,9 @@ size_t Seq_SoundLookup(String name) {
     return found->second;
 }
 
-bool Audio_LoadTable() {
+static bool Audio_LoadTable() {
     // Parse the sound table lump and populate snd_names 
-    std::vector< std::vector<StringView> > audio_lumps{};
+    std::vector< std::vector<StringView> > audio_lump_names{};
     char* snddata;
     {
         auto sndtable_lump = wad::find("SNDTABLE");
@@ -91,7 +102,7 @@ bool Audio_LoadTable() {
                 if (snddata[pos] == '\n') {
                     // Line break - add a new entry to the audio lump list
                     if (alternatives.size()) {
-                        audio_lumps.push_back(alternatives);
+                        audio_lump_names.push_back(alternatives);
                         alternatives = std::vector<StringView>{};
                     }
                     keep_parsing = true;
@@ -107,12 +118,17 @@ bool Audio_LoadTable() {
         }
     }
     size_t entry_index = 0;
-    for (auto entry : audio_lumps) {
+    for (auto entry : audio_lump_names) {
         size_t loaded = 0;
         for (auto name : entry) {
             auto lump = wad::find(name);
-            if (lump && lump->section() == wad::Section::sounds) {
-                snd_entries.insert(std::make_pair(lump->lump_name(), snd_entries.size() + 1));
+            if (lump && (lump->section() == wad::Section::sounds || lump->section() == wad::Section::music)) {
+                String data = lump->as_bytes();
+                SDL_RWops* reader = SDL_RWFromConstMem(data.data(), data.size());
+                Mix_Chunk* chunk = Mix_LoadWAV_RW(reader, 1);
+                audio_chunks.push_back(chunk);
+                snd_entries.insert(std::make_pair(lump->lump_name(), entry_index));
+                loaded += 1;
             }
         }
         if (!loaded) {
@@ -125,9 +141,50 @@ bool Audio_LoadTable() {
     return true;
 }
 
+static void I_ChannelFinished(int channel);
+
 // I_InitSequencer
 void I_InitSequencer() {
+    // Set mixer params
+    int audio_rate = s_rate;
+    Uint16 audio_format = s_format;
+    int audio_channels = s_channels;
+    // Set up mixer
+    if (Mix_OpenAudio(audio_rate, audio_format, audio_channels, 4096) < 0) {
+        SDL_Log("Could not open audio device! %s", SDL_GetError());
+    } else {
+        Mix_QuerySpec(&audio_rate, &audio_format, &audio_channels);
+        SDL_Log("Opened audio at %d Hz %d bit%s %s", audio_rate,
+            (audio_format&0xFF),
+            (SDL_AUDIO_ISFLOAT(audio_format) ? " (float)" : ""),
+            (audio_channels > 2) ? "surround" :
+            (audio_channels > 1) ? "stereo" : "mono");
+    }
+    // Channel finished callback
+    Mix_ChannelFinished(I_ChannelFinished);
+    // Set up soundfont
+    bool sffound = false;
+    Optional<String> sfpath = s_soundfont->c_str();
+    if (!s_soundfont->empty() && app::file_exists(sfpath.value())) {
+        sffound = true;
+        // SDL_Log("Soundfont %s doesn't exist!", s_soundfont->data());
+    }
+    // Search for soundfonts
+    if (!sffound && (sfpath = app::find_data_file("doomsnd.sf2"))) {
+        sffound = true;
+    }
+    if (!sffound && (sfpath = app::find_data_file("doomsnd.dls"))) {
+        sffound = true;
+    }
+    if (sffound && !Mix_SetSoundFonts(sfpath->data())) {
+        SDL_Log("Could not set soundfont path to %s\n", s_soundfont->data());
+    }
+    Audio_LoadTable();
     return;
+}
+
+static void I_ChannelFinished(int channel) {
+    channels_in_use--;
 }
 
 //
@@ -150,6 +207,9 @@ int I_GetVoiceCount() {
 // I_GetSoundSource
 //
 sndsrc_t* I_GetSoundSource(int c) {
+    if (c < sources.size()) {
+        return sources[c];
+    }
     return nullptr;
 }
 
@@ -163,6 +223,9 @@ void I_UpdateChannel(int c, int volume, int pan) {
     chan->basevol   = (float)volume;
     chan->pan       = (byte)(pan >> 1);
     */
+    Uint8 leftPan = pan;
+    Uint8 rightPan = 255 - pan;
+    Mix_SetPanning(c, leftPan, rightPan);
 }
 
 //
@@ -170,6 +233,7 @@ void I_UpdateChannel(int c, int volume, int pan) {
 //
 
 void I_ShutdownSound(void) {
+    std::for_each(audio_chunks.begin(), audio_chunks.end(), Mix_FreeChunk);
     Mix_CloseAudio();
 }
 
@@ -242,7 +306,17 @@ void I_StartMusic(int mus_id) {
 //
 
 void I_StopSound(sndsrc_t* origin, int sfx_id) {
-    return;
+    auto source = std::find(sources.begin(), sources.end(), origin);
+    if (source == sources.end()) {
+        return;
+    }
+    size_t index = std::distance(sources.begin(), source);
+    size_t channel = channels[index];
+    Mix_Chunk* chunk = Mix_GetChunk(channel);
+    if (chunk == audio_chunks[sfx_id]) {
+        Mix_HaltChannel(channel);
+    }
+    channels_in_use--;
 }
 
 //
@@ -250,9 +324,18 @@ void I_StopSound(sndsrc_t* origin, int sfx_id) {
 //
 
 void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb) {
-    return;
+    Mix_Chunk* chunk = audio_chunks[sfx_id];
+    size_t curChannel = channels_in_use++;
+    Uint8 leftPan = pan;
+    Uint8 rightPan = 255 - pan;
+    Mix_Volume(curChannel, volume);
+    Mix_SetPanning(curChannel, leftPan, rightPan);
+    Mix_PlayChannel(curChannel, chunk, 0);
+    sources.push_back(origin);
+    channels.push_back(curChannel);
 }
 
 void I_RemoveSoundSource(int c) {
-    return;
+    Mix_Volume(c, 128);
+    Mix_SetPanning(c, 128, 128);
 }
