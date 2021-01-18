@@ -158,7 +158,7 @@ void S_SetGainOutput(float db) {
 //
 
 void S_StartMusic(int mnum) {
-    if(nomusic) {
+    if(nomusic || mnum == lastmusic) {
         return;
     }
 

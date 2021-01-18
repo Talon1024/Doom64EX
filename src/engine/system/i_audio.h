@@ -24,6 +24,7 @@
 #define __I_AUDIO_H__
 
 // 20120107 bkw: Linux users can change the default FluidSynth backend here:
+#include "m_fixed.h"
 #ifndef _WIN32
 #define DEFAULT_FLUID_DRIVER "sndio"
 
