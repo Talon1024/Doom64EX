@@ -54,7 +54,7 @@
 
 // 20120203 villsa - cvar for soundfont location
 StringProperty s_soundfont("s_soundfont", "Soundfont location", "doomsnd.sf2"_sv);
-IntProperty s_rate("s_rate", "Audio sample rate", 22050);
+IntProperty s_rate("s_rate", "Audio sample rate", 44100);
 IntProperty s_format("s_format", "Audio format", AUDIO_S16LSB);
 IntProperty s_channels("s_channels", "Channels", 2);
 
@@ -196,7 +196,7 @@ void I_InitSequencer() {
     Uint16 audio_format = s_format;
     int audio_channels = s_channels;
     // Set up mixer
-    if (Mix_OpenAudio(audio_rate, audio_format, audio_channels, 4096) < 0) {
+    if (Mix_OpenAudio(audio_rate, audio_format, audio_channels, 2048) < 0) {
         I_Printf("Could not open audio device! %s", SDL_GetError());
     } else {
         Mix_QuerySpec(&audio_rate, &audio_format, &audio_channels);
@@ -326,6 +326,8 @@ void I_SetSoundVolume(float volume) {
 //
 
 void I_ResetSound(void) {
+    channels_in_use = 0;
+    sources.clear();
     return;
 }
 
