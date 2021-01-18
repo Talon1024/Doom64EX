@@ -76,7 +76,7 @@ namespace imp {
         music
     };
 
-    constexpr size_t num_sections = 5;
+    constexpr size_t num_sections = 6;
 
     class BasicLump {
         std::size_t id_;

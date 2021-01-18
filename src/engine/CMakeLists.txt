@@ -275,7 +275,7 @@ set(SOURCES
 add_executable(doom64ex MACOSX_BUNDLE WIN32 ${SOURCES})
 target_include_directories(doom64ex PRIVATE ${INCLUDES})
 target_link_libraries(doom64ex ${LIBRARIES})
-set_property(TARGET doom64ex PROPERTY CXX_STANDARD 14)
+set_property(TARGET doom64ex PROPERTY CXX_STANDARD 17)
 
 if(WIN32)
   set_property(TARGET doom64ex PROPERTY COMPILE_FLAGS "-DFLUIDSYNTH_NOT_A_DLL")

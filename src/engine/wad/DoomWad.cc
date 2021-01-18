@@ -108,6 +108,7 @@ namespace {
                       println("Unknown WAD directory: {}", name);
                   }
                   continue;
+              } else {
               }
 
               lumps.emplace_back(name, section, table_.size());
@@ -137,6 +138,7 @@ namespace {
 UniquePtr<wad::Format> wad::doom_loader(StringView path)
 {
     std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) { return nullptr; }
     Header header;
     read_into(file, header);
     if (memcmp(header.id, "IWAD", 4) == 0 || memcmp(header.id, "PWAD", 4) == 0) {

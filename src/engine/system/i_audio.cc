@@ -32,6 +32,7 @@
 #include <iterator>
 #include <map>
 #include <utility>
+#include <variant>
 
 #include "SDL.h"
 
@@ -47,7 +48,9 @@
 
 #include "SDL_mixer.h"
 #include "i_audio.h"
+#include "i_system.h"
 #include "imp/Property"
+#include "imp/util/StringView"
 
 // 20120203 villsa - cvar for soundfont location
 StringProperty s_soundfont("s_soundfont", "Soundfont location", "doomsnd.sf2"_sv);
@@ -59,26 +62,41 @@ IntProperty s_channels("s_channels", "Channels", 2);
 
 static size_t channels_in_use = 0;
 
-static std::map<String, size_t> snd_entries;
-static std::vector<Mix_Chunk*> audio_chunks;
-static std::vector<Mix_Music*> musics;
-static std::vector<size_t> channels;
-static std::vector<sndsrc_t*> sources;
+struct sndsrcinfo_t {
+    sndsrc_t* source;
+    size_t channel;
+};
+
+struct musicinfo_t {
+    Mix_Music* music;
+    size_t id;
+    bool freed;
+};
+
+typedef std::variant<sndsrc_t*, size_t> sourceref;
+typedef std::variant<String, size_t> audioref;
+
+static std::map<audioref, size_t> snd_entries; // Lump name/id to chunk index
+static std::vector<Mix_Chunk*> audio_chunks; // Chunks
+static std::map<audioref, musicinfo_t*> musics;
+static std::map<sourceref, sndsrcinfo_t*> sources;
 
 size_t Seq_SoundLookup(String name) {
-    auto found = snd_entries.find(name);
-    if (found == snd_entries.end()) {
+    auto found = musics.find(name);
+    if (found == musics.end()) {
         // Not found
         return 0;
     }
-    return found->second;
+    return found->second->id;
 }
 
 static bool Audio_LoadTable() {
     // Parse the sound table lump and populate snd_names 
-    std::vector< std::vector<StringView> > audio_lump_names{};
+    // std::vector< std::vector<StringView> > audio_lump_names{};
+    std::map<String, size_t> audio_lump_names;
     char* snddata;
     {
+        size_t entry_index = 0;
         auto sndtable_lump = wad::find("SNDTABLE");
         if (!sndtable_lump) {
             I_Printf("Cannot find sound table!\n");
@@ -92,7 +110,7 @@ static bool Audio_LoadTable() {
         uint32_t pos = 0;
         uint32_t str_length = 0;
         bool keep_parsing = true;
-        std::vector<StringView> alternatives;
+        std::vector<StringView> alternatives{};
         while (pos < end) {
             if (isspace(snddata[pos])) {
                 // Add the lump name to the list of alternatives
@@ -103,8 +121,19 @@ static bool Audio_LoadTable() {
                 if (snddata[pos] == '\n') {
                     // Line break - add a new entry to the audio lump list
                     if (alternatives.size()) {
-                        audio_lump_names.push_back(alternatives);
+                        for (StringView name : alternatives) {
+                            /*
+                            String naem = name.to_string();
+                            for(size_t i = 0; i < naem.size(); i++) {
+                                if (naem[i] >= 'a') {
+                                    naem[i] -= 32;
+                                }
+                            }
+                            */
+                            audio_lump_names.insert(std::make_pair(name.to_string(), entry_index));
+                        }
                         alternatives = std::vector<StringView>{};
+                        entry_index++;
                     }
                     keep_parsing = true;
                 }
@@ -118,26 +147,42 @@ static bool Audio_LoadTable() {
             pos++;
         }
     }
-    size_t entry_index = 0;
-    for (auto entry : audio_lump_names) {
+    for (wad::LumpIterator iter = wad::section(wad::Section::sounds); iter.has_next(); iter.next()) {
         size_t loaded = 0;
-        for (auto name : entry) {
-            auto lump = wad::find(name);
-            if (lump && (lump->section() == wad::Section::sounds || lump->section() == wad::Section::music)) {
-                String data = lump->as_bytes();
-                SDL_RWops* reader = SDL_RWFromConstMem(data.data(), data.size());
-                Mix_Chunk* chunk = Mix_LoadWAV_RW(reader, 1);
-                audio_chunks.push_back(chunk);
-                snd_entries.insert(std::make_pair(lump->lump_name(), entry_index));
-                loaded += 1;
-            }
+        auto entry = audio_lump_names.find(iter->lump_name().to_string());
+        if (entry != audio_lump_names.end()) {
+            size_t entry_index = entry->second;
+            String data = iter->as_bytes();
+            SDL_RWops* reader = SDL_RWFromConstMem(data.data(), data.size());
+            Mix_Chunk* chunk = Mix_LoadWAV_RW(reader, 1);
+            snd_entries.insert_or_assign(entry_index, audio_chunks.size());snd_entries.insert_or_assign(iter->lump_name().to_string(), audio_chunks.size());
+            audio_chunks.push_back(chunk);
+            loaded += 1;
+            I_Printf("Entry %d: %s\n", entry_index, iter->lump_name().to_string().c_str());
+        } else {
+            // Assume it's music
+            String data = iter->as_bytes();
+            SDL_RWops* reader = SDL_RWFromConstMem(data.data(), data.size());
+            Mix_Music* music = Mix_LoadMUS_RW(reader, 1);
+            size_t mus_id = musics.size();
+            musicinfo_t* info = new musicinfo_t {music, mus_id};
+            musics.insert_or_assign(iter->lump_name().to_string(), info);
+            musics.insert_or_assign(mus_id, info);
+            loaded += 1;
         }
-        if (!loaded) {
-            I_Printf("Failed to register entry %u!\n", entry_index);
-        }
-        entry_index++;
     }
-    I_Printf("Found %u sounds.\n", snd_entries.size());
+    if (wad::section_size(wad::Section::music)) {
+        for (wad::LumpIterator iter = wad::section(wad::Section::music); iter.has_next(); iter.next()) {
+            String data = iter->as_bytes();
+            SDL_RWops* reader = SDL_RWFromConstMem(data.data(), data.size());
+            Mix_Music* music = Mix_LoadMUS_RW(reader, 1);
+            size_t mus_id = musics.size();
+            musicinfo_t* info = new musicinfo_t {music, mus_id};
+            musics.insert_or_assign(iter->lump_name().to_string(), info);
+            musics.insert_or_assign(mus_id, info);
+        }
+    }
+    I_Printf("Found %u sounds and %u musics.\n", audio_chunks.size(), musics.size());
     delete [] snddata;
     return true;
 }
@@ -152,10 +197,10 @@ void I_InitSequencer() {
     int audio_channels = s_channels;
     // Set up mixer
     if (Mix_OpenAudio(audio_rate, audio_format, audio_channels, 4096) < 0) {
-        SDL_Log("Could not open audio device! %s", SDL_GetError());
+        I_Printf("Could not open audio device! %s", SDL_GetError());
     } else {
         Mix_QuerySpec(&audio_rate, &audio_format, &audio_channels);
-        SDL_Log("Opened audio at %d Hz %d bit%s %s", audio_rate,
+        I_Printf("Opened audio at %d Hz %d bit%s %s", audio_rate,
             (audio_format&0xFF),
             (SDL_AUDIO_ISFLOAT(audio_format) ? " (float)" : ""),
             (audio_channels > 2) ? "surround" :
@@ -168,7 +213,7 @@ void I_InitSequencer() {
     Optional<String> sfpath = s_soundfont->c_str();
     if (!s_soundfont->empty() && app::file_exists(sfpath.value())) {
         sffound = true;
-        // SDL_Log("Soundfont %s doesn't exist!", s_soundfont->data());
+        // I_Printf("Soundfont %s doesn't exist!", s_soundfont->data());
     }
     // Search for soundfonts
     if (!sffound && (sfpath = app::find_data_file("doomsnd.sf2"))) {
@@ -179,10 +224,10 @@ void I_InitSequencer() {
     }
     if (sffound) {
         if(!Mix_SetSoundFonts(sfpath->data())) {
-            SDL_Log("Could not set soundfont path to %s\n", s_soundfont->data());
+            I_Printf("Could not set soundfont path to %s\n", s_soundfont->data());
         }
     } else {
-        SDL_Log("Soundfont not found!");
+        I_Printf("Soundfont not found!");
     }
     Audio_LoadTable();
     return;
@@ -190,6 +235,7 @@ void I_InitSequencer() {
 
 static void I_ChannelFinished(int channel) {
     channels_in_use--;
+    I_Printf("Channel %d finished! %d channels in use now.\n", channel, channels_in_use);
 }
 
 //
@@ -212,8 +258,9 @@ int I_GetVoiceCount() {
 // I_GetSoundSource
 //
 sndsrc_t* I_GetSoundSource(int c) {
-    if (c < sources.size()) {
-        return sources[c];
+    auto source = sources.find(c);
+    if (source != sources.end()) {
+        return source->second->source;
     }
     return nullptr;
 }
@@ -228,8 +275,10 @@ void I_UpdateChannel(int c, int volume, int pan) {
     chan->basevol   = (float)volume;
     chan->pan       = (byte)(pan >> 1);
     */
+    I_Printf("Updating channel %d\n", c);
     Uint8 leftPan = pan;
     Uint8 rightPan = 255 - pan;
+    Mix_Volume(c, volume);
     Mix_SetPanning(c, leftPan, rightPan);
 }
 
@@ -239,6 +288,16 @@ void I_UpdateChannel(int c, int volume, int pan) {
 
 void I_ShutdownSound(void) {
     std::for_each(audio_chunks.begin(), audio_chunks.end(), Mix_FreeChunk);
+    std::for_each(musics.begin(), musics.end(), [](std::pair<audioref, musicinfo_t*> ref) {
+        if (!ref.second->freed) {
+            Mix_FreeMusic(ref.second->music);
+        } else {
+            // exploit double reference to free the info
+            delete ref.second;
+            return;
+        }
+        ref.second->freed = true;
+    });
     Mix_CloseAudio();
 }
 
@@ -275,6 +334,7 @@ void I_ResetSound(void) {
 //
 
 void I_PauseSound(void) {
+    Mix_PauseMusic();
     for (size_t curChannel = 0; curChannel < channels_in_use; curChannel++) {
         Mix_Pause(curChannel);
     }
@@ -285,6 +345,7 @@ void I_PauseSound(void) {
 //
 
 void I_ResumeSound(void) {
+    Mix_ResumeMusic();
     for (size_t curChannel = 0; curChannel < channels_in_use; curChannel++) {
         Mix_Resume(curChannel);
     }
@@ -303,7 +364,8 @@ void I_SetGain(float db) {
 //
 
 void I_StartMusic(int mus_id) {
-    return;
+    Mix_Music* music = musics[mus_id]->music;
+    Mix_PlayMusic(music, -1);
 }
 
 //
@@ -312,27 +374,29 @@ void I_StartMusic(int mus_id) {
 
 void I_StopSound(sndsrc_t* origin, int sfx_id) {
     size_t channels_stopped = 0;
-    std::vector<size_t> to_erase{};
-    for (size_t channel = 0; channel < channels_in_use; channel++) {
-        Mix_Chunk* chunk = Mix_GetChunk(channel);
-        if (chunk == audio_chunks[sfx_id]) {
-            Mix_HaltChannel(channel);
-            channels_stopped++;
+    if (sfx_id > 0) {
+        for (size_t channel = 0; channel < channels_in_use; channel++) {
+            Mix_Chunk* chunk = Mix_GetChunk(channel);
+            if (chunk == audio_chunks[sfx_id]) {
+                Mix_HaltChannel(channel);
+                sources.erase(channel);
+                channels_stopped++;
+            }
         }
+    } else if (sfx_id < 0) {
+        Mix_HaltMusic();
+        return;
     }
-    for (size_t index = 0; index < sources.size(); index++) {
-        sndsrc_t* source = sources[index];
-        if (source == origin) {
-            Mix_HaltChannel(channels[index]);
-            to_erase.push_back(index);
-            channels_stopped++;
+    if (origin) {
+        auto source = sources.find(origin);
+        if (source != sources.end()) {
+            Mix_HaltChannel(source->second->channel);
+            sources.erase(origin);
         }
+        channels_stopped++;
     }
-    std::for_each(to_erase.rbegin(), to_erase.rend(), [](size_t i) {
-        sources.erase(sources.begin() + i);
-        channels.erase(channels.begin() + 1);
-    });
     channels_in_use -= channels_stopped;
+    I_Printf("I_StopSound: Channels in use: %d\n", channels_in_use);
 }
 
 //
@@ -340,7 +404,13 @@ void I_StopSound(sndsrc_t* origin, int sfx_id) {
 //
 
 void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb) {
-    Mix_Chunk* chunk = audio_chunks[sfx_id];
+    auto chuck = snd_entries.find(sfx_id);
+    if (chuck == snd_entries.end()) {
+        I_Printf("Sound entry %d not found!\n", sfx_id);
+        return;
+    }
+    size_t chunk_index = chuck->second;
+    Mix_Chunk* chunk = audio_chunks[chunk_index];
     size_t curChannel = ++channels_in_use;
     Uint8 leftPan = pan;
     Uint8 rightPan = 255 - pan;
@@ -348,12 +418,15 @@ void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb)
     Mix_SetPanning(curChannel, leftPan, rightPan);
     Mix_PlayChannel(curChannel, chunk, 0);
     if (origin) {
-        sources.push_back(origin);
-        channels.push_back(curChannel);
+        sndsrcinfo_t* info = new sndsrcinfo_t {origin, curChannel};
+        sources.insert_or_assign(curChannel, info);
+        sources.insert_or_assign(origin, info);
     }
+    I_Printf("I_StartSound: Channels in use: %d\n", channels_in_use);
 }
 
 void I_RemoveSoundSource(int c) {
+    sources.erase(c);
     Mix_Volume(c, 128);
     Mix_SetPanning(c, 128, 128);
 }

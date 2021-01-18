@@ -496,6 +496,8 @@ static bool Title_Ticker(void) {
 // Title_Start
 //
 
+size_t Seq_SoundLookup(String name);
+
 static void Title_Start(void) {
     gameaction = ga_nothing;
     pagetic = gametic;
@@ -503,7 +505,7 @@ static void Title_Start(void) {
     paused = false;
     allowclearmenu = false;
 
-    S_StartMusic(mus_title);
+    S_StartMusic(Seq_SoundLookup("MUSTITLE"));
     M_StartMainMenu();
 }
 

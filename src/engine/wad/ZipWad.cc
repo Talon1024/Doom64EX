@@ -270,6 +270,7 @@ namespace {
 UniquePtr<wad::Format> wad::zip_loader(StringView name)
 {
     std::ifstream file(name, std::ios::binary);
+    if (!file.is_open()) { return nullptr; }
     file.exceptions(file.badbit | file.failbit);
 
     char signature[4];

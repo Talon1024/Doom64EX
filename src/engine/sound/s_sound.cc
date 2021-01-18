@@ -175,7 +175,7 @@ void S_StartMusic(int mnum) {
 //
 
 void S_StopMusic(void) {
-    I_StopSound(NULL, lastmusic);
+    I_StopSound(NULL, -lastmusic - 1);
     lastmusic = 0;
 }
 
