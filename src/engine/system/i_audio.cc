@@ -37,6 +37,7 @@
 
 #include "SDL_audio.h"
 #include "SDL_error.h"
+#include "SDL_log.h"
 #include "SDL_rwops.h"
 #include "doomtype.h"
 #include "doomdef.h"
@@ -173,11 +174,15 @@ void I_InitSequencer() {
     if (!sffound && (sfpath = app::find_data_file("doomsnd.sf2"))) {
         sffound = true;
     }
-    if (!sffound && (sfpath = app::find_data_file("doomsnd.dls"))) {
+    if (!sffound && (sfpath = app::find_data_file("DOOMSND.DLS"))) {
         sffound = true;
     }
-    if (sffound && !Mix_SetSoundFonts(sfpath->data())) {
-        SDL_Log("Could not set soundfont path to %s\n", s_soundfont->data());
+    if (sffound) {
+        if(!Mix_SetSoundFonts(sfpath->data())) {
+            SDL_Log("Could not set soundfont path to %s\n", s_soundfont->data());
+        }
+    } else {
+        SDL_Log("Soundfont not found!");
     }
     Audio_LoadTable();
     return;
@@ -306,17 +311,28 @@ void I_StartMusic(int mus_id) {
 //
 
 void I_StopSound(sndsrc_t* origin, int sfx_id) {
-    auto source = std::find(sources.begin(), sources.end(), origin);
-    if (source == sources.end()) {
-        return;
+    size_t channels_stopped = 0;
+    std::vector<size_t> to_erase{};
+    for (size_t channel = 0; channel < channels_in_use; channel++) {
+        Mix_Chunk* chunk = Mix_GetChunk(channel);
+        if (chunk == audio_chunks[sfx_id]) {
+            Mix_HaltChannel(channel);
+            channels_stopped++;
+        }
     }
-    size_t index = std::distance(sources.begin(), source);
-    size_t channel = channels[index];
-    Mix_Chunk* chunk = Mix_GetChunk(channel);
-    if (chunk == audio_chunks[sfx_id]) {
-        Mix_HaltChannel(channel);
+    for (size_t index = 0; index < sources.size(); index++) {
+        sndsrc_t* source = sources[index];
+        if (source == origin) {
+            Mix_HaltChannel(channels[index]);
+            to_erase.push_back(index);
+            channels_stopped++;
+        }
     }
-    channels_in_use--;
+    std::for_each(to_erase.rbegin(), to_erase.rend(), [](size_t i) {
+        sources.erase(sources.begin() + i);
+        channels.erase(channels.begin() + 1);
+    });
+    channels_in_use -= channels_stopped;
 }
 
 //
@@ -325,14 +341,16 @@ void I_StopSound(sndsrc_t* origin, int sfx_id) {
 
 void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb) {
     Mix_Chunk* chunk = audio_chunks[sfx_id];
-    size_t curChannel = channels_in_use++;
+    size_t curChannel = ++channels_in_use;
     Uint8 leftPan = pan;
     Uint8 rightPan = 255 - pan;
     Mix_Volume(curChannel, volume);
     Mix_SetPanning(curChannel, leftPan, rightPan);
     Mix_PlayChannel(curChannel, chunk, 0);
-    sources.push_back(origin);
-    channels.push_back(curChannel);
+    if (origin) {
+        sources.push_back(origin);
+        channels.push_back(curChannel);
+    }
 }
 
 void I_RemoveSoundSource(int c) {
