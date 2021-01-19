@@ -496,7 +496,7 @@ static bool Title_Ticker(void) {
 // Title_Start
 //
 
-size_t Seq_SoundLookup(String name);
+// size_t Seq_SoundLookup(String name);
 
 static void Title_Start(void) {
     gameaction = ga_nothing;
@@ -505,7 +505,7 @@ static void Title_Start(void) {
     paused = false;
     allowclearmenu = false;
 
-    S_StartMusic(Seq_SoundLookup("MUSTITLE"));
+    S_StartMusic("MUSTITLE");
     M_StartMainMenu();
 }
 

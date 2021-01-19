@@ -59,7 +59,7 @@ static int wi_stage = 0;
 static int wi_counter = 0;
 static int wi_advance = 0;
 
-size_t Seq_SoundLookup(String name);
+// size_t Seq_SoundLookup(String name);
 
 //
 // WI_Start
@@ -115,7 +115,7 @@ void WI_Start(void) {
     wi_advance = 0;
 
     // start music
-    S_StartMusic(Seq_SoundLookup("MUSDONE"));
+    S_StartMusic("MUSDONE");
 
     allowmenu = true;
 }

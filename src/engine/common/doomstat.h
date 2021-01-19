@@ -176,10 +176,10 @@ extern  gamestate_t gamestate;
 // MAPINFO
 //
 
-typedef struct {
+typedef struct mapdef_t {
     char        mapname[64];
     int         mapid;
-    int         music;
+    char        music[8];
     int         type;
     int         cluster;
     int         exitdelay;
@@ -192,9 +192,9 @@ typedef struct {
     int         allowfreelook;
 } mapdef_t;
 
-typedef struct {
+typedef struct clusterdef_t {
     int         id;
-    int         music;
+    char        music[8];
     dboolean    enteronly;
     short       pic_x;
     short       pic_y;

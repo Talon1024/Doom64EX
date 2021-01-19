@@ -67,7 +67,7 @@ int S_GetActiveSounds(void);
 
 
 // Start music using <music_id> from sounds.h
-void S_StartMusic(int mnum);
+void S_StartMusic(const char* music);
 void S_StopMusic(void);
 
 

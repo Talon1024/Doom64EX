@@ -69,7 +69,7 @@
 
 static dboolean nosound = false;
 static dboolean nomusic = false;
-static int lastmusic = 0;
+static const char* lastmusic = nullptr;
 
 FloatProperty s_sfxvol("s_sfxvol", "", 80.0f, 0,
                        [](const FloatProperty& p, float, float&)
@@ -157,6 +157,7 @@ void S_SetGainOutput(float db) {
 // S_StartMusic
 //
 
+/*
 void S_StartMusic(int mnum) {
     if(nomusic || mnum == lastmusic) {
         return;
@@ -169,14 +170,26 @@ void S_StartMusic(int mnum) {
     I_StartMusic(mnum);
     lastmusic = mnum;
 }
+*/
+
+void S_StartMusic(const char* music) {
+    if(*music == 0 || music == lastmusic) {
+        return;
+    }
+
+    String mus_id(music, 8);
+
+    I_StartMusic(mus_id);
+    lastmusic = music;
+}
 
 //
 // S_StopMusic
 //
 
 void S_StopMusic(void) {
-    I_StopSound(NULL, -lastmusic - 1);
-    lastmusic = 0;
+    I_StopMusic();
+    lastmusic = nullptr;
 }
 
 //
