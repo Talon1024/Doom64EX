@@ -31,11 +31,12 @@
 #include <algorithm>
 #include <memory>
 #include <unordered_map>
-#include <unordered_set> // Use for "channels_in_use"
+#include <bitset> // Use for "channels_in_use"
 #include <variant>
 
 #include "SDL.h"
 
+#include "SDL_mutex.h"
 #include "doomtype.h"
 #include "doomdef.h"
 #include "con_console.h"    // for cvars
@@ -56,8 +57,9 @@ IntProperty s_channels("s_channels", "Channels", 2);
 
 // 20210117 rewrite - Talon1024
 
-static int channels_in_use = 0;
-static std::unordered_set<int> active_channels{};
+// static SDL_sem* audio_access;
+const int MAX_CHANNELS = 256;
+static std::bitset<MAX_CHANNELS> active_channels{};
 const int GROUP_GAMESOUNDS = 5;
 
 struct sndsrcinfo_t {
@@ -81,6 +83,13 @@ static std::unordered_map<String, musicinfo_t*> musics;
 static std::unordered_map<sourceref, std::shared_ptr<sndsrcinfo_t>> sources;
 
 /*
+template<size_t size> static void PrintBitset(std::bitset<size>& bitset) {
+    for (size_t i = 0; i < size; i++) {
+        I_Printf("%s", bitset[i] ? "1" : "0");
+    }
+    I_Printf("\n");
+}
+
 size_t Seq_SoundLookup(String name) {
     auto found = musics.find(name);
     if (found == musics.end()) {
@@ -206,7 +215,7 @@ void I_InitSequencer() {
             (audio_channels > 2) ? "surround" :
             (audio_channels > 1) ? "stereo" : "mono");
     }
-    Mix_ReserveChannels(256);
+    Mix_AllocateChannels(256);
     // Channel finished callback
     Mix_ChannelFinished(I_ChannelFinished);
     // Set up soundfont
@@ -231,17 +240,18 @@ void I_InitSequencer() {
         I_Printf("Soundfont not found!");
     }
     Audio_LoadTable();
+    // audio_access = SDL_CreateSemaphore(1);
     return;
 }
 
 static void I_ChannelFinished(int channel) {
-    channels_in_use--;
-    // I_Printf("Channel %d finished! %d channels in use now.\n", channel, channels_in_use);
-    active_channels.erase(channel);
+    // I_Printf("Channel %d finished\n", channel);
+    active_channels.set(channel, false);
     auto source = sources.find(channel);
     if (source != sources.end()) {
-        std::shared_ptr<sndsrcinfo_t> info = source->second;
-        sndsrc_t* origin = info->source;
+        std::weak_ptr<sndsrcinfo_t> infop(source->second);
+        // I_Printf("I_ChannelFinished: info refcount %d\n", info.use_count());
+        sndsrc_t* origin = infop.lock()->source;
         sources.erase(channel);
         sources.erase(origin);
     }
@@ -252,7 +262,11 @@ static void I_ChannelFinished(int channel) {
 //
 
 int I_GetMaxChannels(void) {
-    return channels_in_use;
+    int last_bit = 0;
+    for (size_t bit = 0; bit < active_channels.size(); bit++) {
+        if (active_channels[bit]) { last_bit = bit; }
+    }
+    return last_bit;
 }
 
 //
@@ -260,16 +274,20 @@ int I_GetMaxChannels(void) {
 //
 
 int I_GetVoiceCount() {
-    return channels_in_use;
+    return Mix_Playing(-1);
 }
 
 //
 // I_GetSoundSource
 //
 sndsrc_t* I_GetSoundSource(int c) {
+    if (!active_channels[c]) return nullptr;
     auto source = sources.find(c);
     if (source != sources.end()) {
-        return source->second->source;
+        std::weak_ptr<sndsrcinfo_t> infop(source->second);
+        if (!infop.expired()) {
+            return infop.lock()->source;
+        }
     }
     return nullptr;
 }
@@ -285,6 +303,7 @@ void I_UpdateChannel(int c, int volume, int pan) {
     chan->pan       = (byte)(pan >> 1);
     */
     // I_Printf("Updating channel %d\n", c);
+    if (!active_channels[c]) { return; }
     Uint8 leftPan = 255 - pan;
     Uint8 rightPan = pan;
     Mix_Volume(c, volume);
@@ -320,9 +339,9 @@ void I_SetMusicVolume(float volume) {
 
 void I_SetSoundVolume(float volume) {
     // 0 <= volume <= 100
-    return;
-    int mixVolume = (int) (volume * 128 / 100);
-    for (int curChannel = 0; curChannel < channels_in_use; curChannel++) {
+    float factor = volume / 100;
+    int mixVolume = (int) (volume * 128 * factor / 100);
+    for (size_t curChannel = 0; curChannel < MAX_CHANNELS; curChannel++) {
         Mix_Volume(curChannel, mixVolume);
     }
 }
@@ -332,10 +351,9 @@ void I_SetSoundVolume(float volume) {
 //
 
 void I_ResetSound(void) {
-    channels_in_use = 0;
     Mix_HaltGroup(GROUP_GAMESOUNDS);
     sources.clear();
-    active_channels.clear();
+    active_channels.reset();
     return;
 }
 
@@ -345,9 +363,11 @@ void I_ResetSound(void) {
 
 void I_PauseSound(void) {
     Mix_PauseMusic();
-    std::for_each(active_channels.begin(), active_channels.end(), [](int curChannel) {
-        Mix_Pause(curChannel);
-    });
+    for (size_t curChannel = 0; curChannel < 256; curChannel++) {
+        if (active_channels[curChannel]) {
+            Mix_Pause(curChannel);
+        }
+    }
 }
 
 //
@@ -356,9 +376,11 @@ void I_PauseSound(void) {
 
 void I_ResumeSound(void) {
     Mix_ResumeMusic();
-    std::for_each(active_channels.begin(), active_channels.end(), [](int curChannel) {
-        Mix_Resume(curChannel);
-    });
+    for (size_t curChannel = 0; curChannel < 256; curChannel++) {
+        if (active_channels[curChannel]) {
+            Mix_Resume(curChannel);
+        }
+    }
 }
 
 //
@@ -399,10 +421,12 @@ void I_StopMusic() {
 
 void I_StopSound(sndsrc_t* origin, int sfx_id) {
     if (sfx_id > 0) {
-        std::for_each(active_channels.begin(), active_channels.end(), [&sfx_id](int channel) {
-            Mix_Chunk* chunk = Mix_GetChunk(channel);
+        for (size_t curChannel = 0; curChannel < MAX_CHANNELS; curChannel++) {
+            if (!active_channels[curChannel]) { continue; }
+            Mix_Chunk* chunk = Mix_GetChunk(curChannel);
             if (chunk == audio_chunks[sfx_id]) {
-                Mix_HaltChannel(channel);
+                active_channels.set(curChannel, false);
+                Mix_HaltChannel(curChannel);
                 // Erased by channel finished callback
                 /*
                 auto source = sources.find(channel);
@@ -414,12 +438,17 @@ void I_StopSound(sndsrc_t* origin, int sfx_id) {
                 }
                 */
             }
-        });
+        }
     }
     if (origin) {
         auto source = sources.find(origin);
         if (source != sources.end()) {
-            Mix_HaltChannel(source->second->channel);
+            std::weak_ptr<sndsrcinfo_t> infop(source->second);
+            // I_Printf("I_StopSound: info refcount %d\n", info.use_count());
+            size_t channel = infop.lock()->channel;
+            active_channels.set(channel, false);
+            Mix_HaltChannel(channel);
+            /*
             auto source = sources.find(origin);
             if (source != sources.end()) {
                 std::shared_ptr<sndsrcinfo_t> info = sources[origin];
@@ -427,6 +456,7 @@ void I_StopSound(sndsrc_t* origin, int sfx_id) {
                 sources.erase(channel);
                 sources.erase(origin);
             }
+            */
         }
     }
 }
@@ -443,31 +473,40 @@ void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb)
     }
     size_t chunk_index = chuck->second;
     Mix_Chunk* chunk = audio_chunks[chunk_index];
-    int curChannel = 0;
-    while(Mix_Playing(curChannel)) {
-        curChannel++;
-    }
     Uint8 leftPan = 255 - pan;
     Uint8 rightPan = pan;
+    int curChannel = Mix_PlayChannel(-1, chunk, 0);
     Mix_Volume(curChannel, volume);
     Mix_SetPanning(curChannel, leftPan, rightPan);
-    Mix_PlayChannel(curChannel, chunk, 0);
     Mix_GroupChannel(curChannel, GROUP_GAMESOUNDS);
-    I_Printf("I_StartSound: channel %d\n", curChannel);
+    active_channels.set(curChannel);
     if (origin) {
         std::shared_ptr<sndsrcinfo_t> info = std::make_shared<sndsrcinfo_t>(origin, curChannel);
         sources.insert_or_assign(curChannel, info);
         sources.insert_or_assign(origin, info);
+        // I_Printf("I_StartSound: info refcount %d\n", info.use_count());
         // infos.push_back(info);
     }
 }
 
-void I_RemoveSoundSource(int c) {
-    auto source = sources.find(c);
+void I_RemoveSoundSource(int channel) {
+    auto source = sources.find(channel);
     if (source != sources.end()) {
-        std::shared_ptr<sndsrcinfo_t> info = source->second;
-        sndsrc_t* origin = info->source;
-        sources.erase(c);
+        std::weak_ptr<sndsrcinfo_t> infop(source->second);
+        // I_Printf("I_RemoveSoundSource: info refcount %d\n", infop.use_count());
+        sndsrc_t* origin = infop.lock()->source;
+        sources.erase(channel);
+        sources.erase(origin);
+    }
+}
+
+void I_RemoveSoundSource(sndsrc_t* origin) {
+    auto source = sources.find(origin);
+    if (source != sources.end()) {
+        std::weak_ptr<sndsrcinfo_t> infop(source->second);
+        // I_Printf("I_RemoveSoundSource: info refcount %d\n", infop.use_count());
+        size_t channel = infop.lock()->channel;
+        sources.erase(channel);
         sources.erase(origin);
     }
 }

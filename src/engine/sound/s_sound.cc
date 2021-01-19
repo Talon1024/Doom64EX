@@ -257,6 +257,7 @@ int S_GetActiveSounds(void) {
 //
 
 void S_RemoveOrigin(mobj_t* origin) {
+    /*
     int     channels;
     mobj_t* source;
     int     i;
@@ -269,6 +270,8 @@ void S_RemoveOrigin(mobj_t* origin) {
             I_RemoveSoundSource(i);
         }
     }
+    */
+    I_RemoveSoundSource((sndsrc_t*)origin);
 }
 
 //

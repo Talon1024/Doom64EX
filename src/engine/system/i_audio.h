@@ -49,6 +49,7 @@ void I_InitSequencer(void);
 void I_ShutdownSound(void);
 void I_UpdateChannel(int c, int volume, int pan);
 void I_RemoveSoundSource(int c);
+void I_RemoveSoundSource(sndsrc_t* origin);
 void I_SetMusicVolume(float volume);
 void I_SetSoundVolume(float volume);
 void I_ResetSound(void);
