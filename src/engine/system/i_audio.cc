@@ -37,6 +37,7 @@
 #include "SDL.h"
 
 #include "SDL_mutex.h"
+#include "SDL_rwops.h"
 #include "doomtype.h"
 #include "doomdef.h"
 #include "con_console.h"    // for cvars
@@ -48,11 +49,11 @@
 #include "i_system.h"
 #include "imp/Property"
 #include "imp/util/StringView"
+#include "imp/util/Types"
 
 // 20120203 villsa - cvar for soundfont location
 StringProperty s_soundfont("s_soundfont", "Soundfont location", "doomsnd.sf2"_sv);
 IntProperty s_rate("s_rate", "Audio sample rate", 44100);
-IntProperty s_format("s_format", "Audio format", AUDIO_S16LSB);
 IntProperty s_channels("s_channels", "Channels", 2);
 
 // 20210117 rewrite - Talon1024
@@ -74,10 +75,21 @@ struct musicinfo_t {
     uint8_t refcount;
 };
 
+enum audio_file_format {
+    FORMAT_UNKNOWN,
+    FORMAT_OTHER,
+    FORMAT_MIDI
+};
+
+struct sndentry_t {
+    size_t chunk_index;
+    audio_file_format format;
+};
+
 typedef std::variant<sndsrc_t*, size_t> sourceref;
 typedef std::variant<String, size_t> audioref;
 
-static std::unordered_map<audioref, size_t> snd_entries; // Lump name/id to chunk index
+static std::unordered_map<audioref, sndentry_t> snd_entries; // Lump name/id to chunk index
 static std::vector<Mix_Chunk*> audio_chunks; // Chunks
 static std::unordered_map<String, musicinfo_t*> musics;
 static std::unordered_map<sourceref, std::shared_ptr<sndsrcinfo_t>> sources;
@@ -162,11 +174,25 @@ static bool Audio_LoadTable() {
         // size_t loaded = 0;
         auto entry = audio_lump_names.find(iter->lump_name().to_string());
         if (entry != audio_lump_names.end()) {
+            // Get lump data
             size_t entry_index = entry->second;
             String data = iter->as_bytes();
+            // Determine file format and load it
+            audio_file_format fmt = FORMAT_OTHER;
             SDL_RWops* reader = SDL_RWFromConstMem(data.data(), data.size());
+            size_t audio_pos = SDL_RWtell(reader);
+            // Look at the header
+            char format_id[4];
+            SDL_RWread(reader, format_id, 1, 4);
+            if (dstrncmp(format_id, "MThd", 4) == 0) {
+                fmt = FORMAT_MIDI;
+            }
+            // Now load the data
+            SDL_RWseek(reader, audio_pos, RW_SEEK_SET);
             Mix_Chunk* chunk = Mix_LoadWAV_RW(reader, 1);
-            snd_entries.insert_or_assign(entry_index, audio_chunks.size());snd_entries.insert_or_assign(iter->lump_name().to_string(), audio_chunks.size());
+            size_t chunk_index = audio_chunks.size();
+            snd_entries.insert_or_assign(entry_index, sndentry_t{chunk_index, fmt});
+            snd_entries.insert_or_assign(iter->lump_name().to_string(), sndentry_t{chunk_index, fmt});
             audio_chunks.push_back(chunk);
             // loaded += 1;
             // I_Printf("Entry %d: %s\n", entry_index, iter->lump_name().to_string().c_str());
@@ -202,7 +228,7 @@ static void I_ChannelFinished(int channel);
 void I_InitSequencer() {
     // Set mixer params
     int audio_rate = s_rate;
-    Uint16 audio_format = s_format;
+    Uint16 audio_format = AUDIO_S16LSB;
     int audio_channels = s_channels;
     // Set up mixer
     if (Mix_OpenAudio(audio_rate, audio_format, audio_channels, 2048) < 0) {
@@ -461,6 +487,30 @@ void I_StopSound(sndsrc_t* origin, int sfx_id) {
     }
 }
 
+// Boost MIDI sound volume
+static void Effect_MIDIGain (int chan, void *stream, int len, void *udata) {
+    int16* sample = (int16*) stream;
+    // int16 minsample = 0;
+    // int16 maxsample = 0;
+    int length = len / sizeof(int16);
+    for (int i = 0; i < length; i++) {
+        sample[i] <<= 3; // sample[i] *= 8;
+        // if (sample[i] < minsample) {
+        //     minsample = sample[i];
+        // }
+        // if (sample[i] > maxsample) {
+        //     maxsample = sample[i];
+        // }
+    }
+    // I_Printf("minimum %d maximum %d\n", minsample, maxsample);
+}
+
+// Causes crashes for some reason...
+// static void Effect_Reverb (int chan, void *stream, int len, void *udata) {
+//     int reverb = *(int*)udata;
+//     I_Printf("Reverb: %d\n", reverb);
+// }
+
 //
 // I_StartSound
 //
@@ -471,7 +521,8 @@ void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb)
         I_Printf("Sound entry %d not found!\n", sfx_id);
         return;
     }
-    size_t chunk_index = chuck->second;
+    size_t chunk_index = chuck->second.chunk_index;
+    audio_file_format fmt = chuck->second.format;
     Mix_Chunk* chunk = audio_chunks[chunk_index];
     Uint8 leftPan = 255 - pan;
     Uint8 rightPan = pan;
@@ -479,6 +530,10 @@ void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb)
     Mix_Volume(curChannel, volume);
     Mix_SetPanning(curChannel, leftPan, rightPan);
     Mix_GroupChannel(curChannel, GROUP_GAMESOUNDS);
+    if (fmt == FORMAT_MIDI) {
+        Mix_RegisterEffect(curChannel, Effect_MIDIGain, nullptr, nullptr);
+    }
+    // Mix_RegisterEffect(curChannel, Effect_Reverb, nullptr, &reverb);
     active_channels.set(curChannel);
     if (origin) {
         std::shared_ptr<sndsrcinfo_t> info = std::make_shared<sndsrcinfo_t>(origin, curChannel);
