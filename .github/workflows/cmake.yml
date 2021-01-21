@@ -74,5 +74,6 @@ jobs:
       with:
         name: doom64ex
         path: |
-          ${{github.workspace}}/build/doom64ex?(.exe)
+          ${{github.workspace}}/build/doom64ex
+          ${{github.workspace}}/build/doom64ex.exe
           ${{github.workspace}}/build/doom64ex.pk3
