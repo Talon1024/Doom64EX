@@ -74,7 +74,7 @@ jobs:
       run: zip doom64ex.zip doom64ex doom64ex.exe doom64ex.pk3
     
     - name: Upload
-      uses: actions/upload-artifact
+      uses: actions/upload-artifact@v2
       with:
         name: doom64ex
         path: ${{github.workspace}}/build/doom64ex.zip
