@@ -22,19 +22,23 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Update repository info
+    - name: Install Dependencies (Linux)
       if: ${{ matrix.os != 'windows-latest' }}
       # The virtual environment already has zlib and libpng set up
       run: |
         sudo apt update
         sudo apt -y install libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev
-
-    - name: Download Dependencies (Windows)
+        
+    - name: Install Dependencies (Windows)
       if: ${{ matrix.os == 'windows-latest' }}
-      uses: teddyking/dependency-action@master
-      with:
-        deps: https://www.libsdl.org/release/SDL2-devel-2.0.14-VC.zip,https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-2.0.1-VC.zip,https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-devel-2.0.4-VC.zip
-      # The virtual environment already has zlib and libpng set up
+      shell: bash
+      run: |
+        curl -O https://www.libsdl.org/release/SDL2-devel-2.0.14-VC.zip
+        curl -O https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-devel-2.0.4-VC.zip
+        curl -O https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-2.0.1-VC.zip
+        unzip SDL2-devel-2.0.14-VC.zip
+        unzip SDL2_mixer-devel-2.0.4-VC.zip
+        unzip SDL2_net-devel-2.0.1-VC.zip
 
     - name: Create Build Environment
       # Some projects don't allow in-source building, so create a separate build directory
@@ -63,3 +67,14 @@ jobs:
       # Execute tests defined by the CMake configuration.  
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: ctest -C $BUILD_TYPE
+    
+    - name: Make package
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: zip doom64ex.zip doom64ex doom64ex.exe doom64ex.pk3
+    
+    - name: Upload
+      uses: actions/upload-artifact
+      with:
+        name: doom64ex
+        path: ${{github.workspace}}/build/doom64ex.zip
