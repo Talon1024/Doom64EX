@@ -16,17 +16,24 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-20.04, ubuntu-18.04, windows-latest]
+      fail-fast: false
+    continue-on-error: true
 
     steps:
     - uses: actions/checkout@v2
 
     - name: Update repository info
       if: ${{ matrix.os != 'windows-latest' }}
-      run: sudo apt update
+      # The virtual environment already has zlib and libpng set up
+      run: |
+        sudo apt update
+        sudo apt -y install libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev
 
-    - name: Install Dependencies
-      if: ${{ matrix.os != 'windows-latest' }}
-      run: sudo apt -y install libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev
+    - name: Download Dependencies (Windows)
+      if: ${{ matrix.os == 'windows-latest' }}
+      uses: teddyking/dependency-action@master
+      with:
+        deps: https://www.libsdl.org/release/SDL2-devel-2.0.14-VC.zip,https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-2.0.1-VC.zip,https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-devel-2.0.4-VC.zip
       # The virtual environment already has zlib and libpng set up
 
     - name: Create Build Environment
