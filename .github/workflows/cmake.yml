@@ -20,9 +20,13 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: Update repository info
+      if: ${{ matrix.os != 'windows-latest' }}
+      run: sudo apt update
+
     - name: Install Dependencies
       if: ${{ matrix.os != 'windows-latest' }}
-      run: sudo apt-get install libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev
+      run: sudo apt -y install libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev
       # The virtual environment already has zlib and libpng set up
 
     - name: Create Build Environment
