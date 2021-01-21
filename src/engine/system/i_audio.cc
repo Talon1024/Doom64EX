@@ -300,9 +300,9 @@ int I_GetVoiceCount() {
 //
 sndsrc_t* I_GetSoundSource(int c) {
     if (!active_channels.test(c)) return nullptr;
-    auto source = channels.find(c);
-    if (source != channels.end()) {
-        return source->second;
+    auto element = channels.find(c);
+    if (element != channels.end()) {
+        return element->second;
     }
     return nullptr;
 }
@@ -483,6 +483,7 @@ static void Effect_Reverb (int chan, void *stream, int len, void *udata) {
 //
 
 void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb) {
+    // I_Printf("I_StartSound: pan %d, reverb %d\n", pan, reverb);
     auto chuck = snd_entries.find(sfx_id);
     if (chuck == snd_entries.end()) {
         I_Printf("Sound entry %d not found!\n", sfx_id);
@@ -514,9 +515,9 @@ void I_RemoveSoundSource(int channel, bool halt) {
     if (halt) {
         Mix_HaltChannel(channel);
     }
-    auto source = channels.find(channel);
-    if (source != channels.end()) {
-        sndsrc_t* origin = source->second;
+    auto channel_element = channels.find(channel);
+    if (channel_element != channels.end()) {
+        sndsrc_t* origin = channel_element->second;
         // if(!channels.erase(channel)) {
         //     I_Printf("I_RemoveSoundSource (channel): Could not remove channel from sources!\n");
         // }
@@ -524,7 +525,12 @@ void I_RemoveSoundSource(int channel, bool halt) {
         // if(!sources.erase(origin)) {
         //     I_Printf("I_RemoveSoundSource (channel): Could not remove origin from sources!\n");
         // }
-        sources.erase(origin);
+        // Unlink all sounds on this channel from the source
+        for (auto source_element = sources.cbegin(); source_element != sources.cend(); source_element++) {
+            if (source_element->first == origin && source_element->second == channel) {
+                sources.erase(source_element);
+            }
+        }
     }
 }
 
@@ -532,8 +538,12 @@ void I_RemoveSoundSource(sndsrc_t* origin, bool halt) {
     size_t source_bucket = sources.bucket(origin);
     size_t source_count = sources.bucket_size(source_bucket);
     if (source_count > 0) {
-        for (auto channel_ptr = sources.begin(source_bucket); channel_ptr != sources.end(source_bucket); channel_ptr++) {
-            int channel = channel_ptr->second;
+        for (auto channel_element = sources.begin(source_bucket); channel_element != sources.end(source_bucket); channel_element++) {
+            // Account for hash collisions
+            if (channel_element->first != origin) {
+                continue;
+            }
+            int channel = channel_element->second;
             active_channels.set(channel, false);
             if (halt) {
                 Mix_HaltChannel(channel);
