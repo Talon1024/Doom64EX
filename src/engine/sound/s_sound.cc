@@ -177,7 +177,13 @@ void S_StartMusic(const char* music) {
         return;
     }
 
-    String mus_id(music, 8);
+    int music_len = 0;
+    for (music_len = 0; music_len < 8; music_len++) {
+        if (!music[music_len]) {
+            break;
+        }
+    }
+    String mus_id(music, music_len);
 
     I_StartMusic(mus_id);
     lastmusic = music;
