@@ -135,6 +135,10 @@ endif(BUILD_TESTS)
 ## Include subprojects
 ##
 
+if(WIN32)
+  add_subdirectory("${CMAKE_SOURCE_DIR}/extern")
+endif(WIN32)
+
 add_subdirectory("${CMAKE_SOURCE_DIR}/src/engine")
 
 if(ENABLE_GTK3)

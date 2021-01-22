@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, ubuntu-18.04]
+        os: [ubuntu-20.04, ubuntu-18.04, windows-latest]
       fail-fast: false
     continue-on-error: true
 
@@ -28,18 +28,6 @@ jobs:
       run: |
         sudo apt update
         sudo apt -y install libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev
-
-    - name: Install Dependencies (Windows)
-      if: ${{ matrix.os == 'windows-latest' }}
-      shell: bash
-      working-directory: ${{github.workspace}}
-      run: |
-        curl -O https://www.libsdl.org/release/SDL2-devel-2.0.14-VC.zip
-        curl -O https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-devel-2.0.4-VC.zip
-        curl -O https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-2.0.1-VC.zip
-        unzip SDL2-devel-2.0.14-VC.zip
-        unzip SDL2_mixer-devel-2.0.4-VC.zip
-        unzip SDL2_net-devel-2.0.1-VC.zip
 
     - name: Create Build Environment
       # Some projects don't allow in-source building, so create a separate build directory
