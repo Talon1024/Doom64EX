@@ -116,11 +116,6 @@ if (NOT USE_CONAN)
   # libpng
   find_package(PNG REQUIRED)
 
-  # FluidSynth
-  if (ENABLE_SYSTEM_FLUIDSYNTH)
-    find_package(FluidSynth REQUIRED)
-  endif()
-
   # OpenGL
   find_package(OpenGL REQUIRED)
 

@@ -33,14 +33,17 @@ set(INSTALL_DIR "${CMAKE_BINARY_DIR}")
 ##------------------------------------------------------------------------------
 ## Source URLs
 ##
-set(SDL2_URL "https://www.libsdl.org/release/SDL2-2.0.4.tar.gz")
+set(SDL2_URL "https://www.libsdl.org/release/SDL2-2.0.14.tar.gz")
 set(SDL2_MD5 "44fc4a023349933e7f5d7a582f7b886e")
 
 set(SDL2_net_URL "https://www.libsdl.org/projects/SDL_net/release/SDL2_net-2.0.1.tar.gz")
-set(SDL2_net_MD5 "5c1d9d1cfa63301b141cb5c0de2ea7c4")
+set(SDL2_net_MD5 "76ed4e6da9c07bd168b2acd9bfefab1b")
 
 set(SDL2_net_VC_URL "https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-2.0.1-VC.zip")
 set(SDL2_net_MINGW_URL "https://www.libsdl.org/projects/SDL_net/release/SDL2_net-devel-2.0.1-mingw.tar.gz")
+
+set(SDL2_mixer_VC_URL "https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-devel-2.0.4-VC.zip")
+set(SDL2_mixer_MINGW_URL "https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-devel-2.0.4-mingw.tar.gz")
 
 set(PkgConfig_URL "http://ftp.gnome.org/pub/gnome/binaries/win32/dependencies/pkg-config_0.23-3_win32.zip")
 
@@ -53,11 +56,8 @@ if(WIN32)
   set(proxy_libintl_URL "http://ftp.gnome.org/pub/gnome/binaries/win32/dependencies/proxy-libintl-dev_20090911_win32.zip")
 endif()
 
-set(FluidSynth_URL "https://sourceforge.net/projects/fluidsynth/files/fluidsynth-1.1.6/fluidsynth-1.1.6.tar.gz/download")
-set(FluidSynth_MD5 "ae5aca6de824b4173667cbd3a310b263")
-
-set(zlib_URL "http://zlib.net/zlib-1.2.8.tar.gz")
-set(zlib_MD5 "44d667c142d7cda120332623eab69f40")
+set(zlib_URL "https://zlib.net/zlib-1.2.11.tar.gz")
+set(zlib_MD5 "1c9f62f0778697a09d36121ead88e08e")
 
 set(libpng_URL "http://download.sourceforge.net/libpng/libpng-1.6.21.tar.gz")
 set(libpng_MD5 "aca36ec8e0a3b406a5912243bc243717")
@@ -188,29 +188,38 @@ if(WIN32)
 endif()
 
 ##------------------------------------------------------------------------------
-## FluidSynth
+## SDL_Mixer
 ##
-ExternalProject_Add(FluidSynth
-  URL ${FluidSynth_URL}
-  URL_MD5 ${FluidSynth_MD5}
-  DEPENDS GLib # PkgConfig proxy_libintl
 
-  INSTALL_DIR ${INSTALL_DIR}
+if(WIN32)
+  if(MSVC)
+  ExternalProject_Add(SDL2_mixer
+    URL ${SDL2_mixer_VC_URL}
+    DEPENDS SDL2 # PkgConfig proxy_libintl
 
-  CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+    INSTALL_DIR ${INSTALL_DIR}
 
-  # We don't need these audio drivers
-  CMAKE_ARGS -Denable-libsndfile=OFF -Denable-aufile=OFF -Denable-jack=OFF -Denable-midishare=OFF
-  CMAKE_ARGS -Denable-ladcca=OFF -Denable-lash=OFF
-  CMAKE_ARGS -Denable-coremidi=OFF
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
 
-  # A MIDI synth with IPv6 support... sure...
-  CMAKE_ARGS -Denable-readline=OFF -Denable-dbus=OFF -Denable-ipv6=OFF
+    # Fix Windows' stdio.h complaining about macro'd snprintf
+    #PATCH_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/patched-config_win32.h <SOURCE_DIR>/src/config_win32.cmake
 
-  # Fix Windows' stdio.h complaining about macro'd snprintf
-  #PATCH_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/patched-config_win32.h <SOURCE_DIR>/src/config_win32.cmake
-
-  CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE} -DCMAKE_PREFIX_PATH=<INSTALL_DIR> -DPKG_CONFIG_USE_CMAKE_PREFIX_PATH=ON)
+    CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE} -DCMAKE_PREFIX_PATH=<INSTALL_DIR> -DPKG_CONFIG_USE_CMAKE_PREFIX_PATH=ON)
+  elseif(MINGW)
+  ExternalProject_Add(SDL2_mixer
+    URL ${SDL2_mixer_MINGW_URL}
+    DEPENDS SDL2 # PkgConfig proxy_libintl
+  
+    INSTALL_DIR ${INSTALL_DIR}
+  
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+  
+    # Fix Windows' stdio.h complaining about macro'd snprintf
+    #PATCH_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/patched-config_win32.h <SOURCE_DIR>/src/config_win32.cmake
+  
+    CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE} -DCMAKE_PREFIX_PATH=<INSTALL_DIR> -DPKG_CONFIG_USE_CMAKE_PREFIX_PATH=ON)
+  endif(MSVC)
+endif(WIN32)
 
 ##------------------------------------------------------------------------------
 ## zlib
