@@ -326,7 +326,7 @@ void S_UpdateSounds(void) {
 // S_StartSound
 //
 
-void S_StartSound(mobj_t* origin, int sfx_id) {
+void S_StartSound(mobj_t* origin, int sfx_id, uint32 flags) {
     int volume;
     int sep;
     int reverb;
@@ -361,7 +361,7 @@ void S_StartSound(mobj_t* origin, int sfx_id) {
     }
 
     // Assigns the handle to one of the channels in the mix/output buffer.
-    I_StartSound(sfx_id, (sndsrc_t*)origin, volume, sep, reverb);
+    I_StartSound(sfx_id, (sndsrc_t*)origin, volume, sep, reverb, flags);
 }
 
 //

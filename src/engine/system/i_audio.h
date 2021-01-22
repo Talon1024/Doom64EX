@@ -59,6 +59,6 @@ void I_SetGain(float db);
 void I_StopSound(sndsrc_t* origin, int sfx_id);
 void I_StartMusic(String &mus_id);
 void I_StopMusic();
-void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb);
+void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb, uint32 flags = 0);
 
 #endif // __I_AUDIO_H__

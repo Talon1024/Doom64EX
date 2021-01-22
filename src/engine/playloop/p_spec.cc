@@ -812,7 +812,7 @@ static void P_SpawnQuake(void *data) {
     quake->thinker.function.acp1 = (actionf_p1)T_Quake;
     quake->tics = line->tag;
 
-    S_StartSound(NULL, sfx_quake);
+    S_StartSound(NULL, sfx_quake, SFX_LOOP);
 }
 
 //

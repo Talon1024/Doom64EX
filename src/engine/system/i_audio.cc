@@ -437,11 +437,16 @@ void I_StopMusic() {
 
 void I_StopSound(sndsrc_t* origin, int sfx_id) {
     if (sfx_id > 0) {
+        auto chuck = snd_entries.find(sfx_id);
+        if (chuck == snd_entries.end()) {
+            // Not found
+            return;
+        }
+        size_t chunk_index = chuck->second.chunk_index;
         for (size_t curChannel = 0; curChannel < MAX_CHANNELS; curChannel++) {
-            if (!active_channels[curChannel]) { continue; }
+            if (!Mix_Playing(curChannel)) { continue; }
             Mix_Chunk* chunk = Mix_GetChunk(curChannel);
-            if (chunk == audio_chunks[sfx_id]) {
-                active_channels.set(curChannel, false);
+            if (chunk == audio_chunks[chunk_index]) {
                 I_RemoveSoundSource(curChannel, true);
             }
         }
@@ -482,7 +487,7 @@ static void Effect_Reverb (int chan, void *stream, int len, void *udata) {
 // I_StartSound
 //
 
-void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb) {
+void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb, uint32 flags) {
     // I_Printf("I_StartSound: pan %d, reverb %d\n", pan, reverb);
     auto chuck = snd_entries.find(sfx_id);
     if (chuck == snd_entries.end()) {
@@ -494,7 +499,8 @@ void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb)
     Mix_Chunk* chunk = audio_chunks[chunk_index];
     Uint8 leftPan = 255 - pan;
     Uint8 rightPan = pan;
-    int curChannel = Mix_PlayChannel(-1, chunk, 0);
+    int loops = (flags & SFX_LOOP) ? -1 : 0;
+    int curChannel = Mix_PlayChannel(-1, chunk, loops);
     Mix_Volume(curChannel, volume);
     Mix_SetPanning(curChannel, leftPan, rightPan);
     Mix_GroupChannel(curChannel, GROUP_GAMESOUNDS);

@@ -52,7 +52,7 @@ void S_ResumeSound(void);
 // Start sound for thing at <origin>
 //  using <sound_id> from sounds.h
 //
-void S_StartSound(mobj_t* origin, int sound_id);
+void S_StartSound(mobj_t* origin, int sound_id, uint32 flags = 0);
 
 void S_UpdateSounds(void);
 void S_RemoveOrigin(mobj_t* origin);
