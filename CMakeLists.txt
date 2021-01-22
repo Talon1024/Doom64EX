@@ -96,6 +96,10 @@ configure_file("${CMAKE_SOURCE_DIR}/src/config.hh.in" "${CMAKE_BINARY_DIR}/confi
 ## Dependencies
 ##
 
+if(WIN32)
+  add_subdirectory("${CMAKE_SOURCE_DIR}/extern")
+endif(WIN32)
+
 if (NOT USE_CONAN)
   # SDL2
   find_package(SDL2 REQUIRED)
@@ -134,10 +138,6 @@ endif(BUILD_TESTS)
 ##------------------------------------------------------------------------------
 ## Include subprojects
 ##
-
-if(WIN32)
-  add_subdirectory("${CMAKE_SOURCE_DIR}/extern")
-endif(WIN32)
 
 add_subdirectory("${CMAKE_SOURCE_DIR}/src/engine")
 
