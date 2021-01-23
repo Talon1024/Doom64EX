@@ -141,7 +141,6 @@ void P_ExplodeMissile(mobj_t* mo) {
     mo->flags &= ~MF_MISSILE;
 
     if(mo->info->deathsound) {
-        S_StopSound(mo, 0);
         S_StartSound(mo, mo->info->deathsound);
     }
 }
