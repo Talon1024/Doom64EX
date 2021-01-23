@@ -38,6 +38,7 @@
 
 #include "SDL_mutex.h"
 #include "SDL_rwops.h"
+#include "SDL_timer.h"
 #include "doomtype.h"
 #include "doomdef.h"
 #include "con_console.h"    // for cvars
@@ -481,10 +482,40 @@ static void Effect_MIDIGain (int chan, void *stream, int len, void *udata) {
     // I_Printf("minimum %d maximum %d\n", minsample, maxsample);
 }
 
+/*
 // Causes crashes for some reason...
 static void Effect_Reverb (int chan, void *stream, int len, void *udata) {
     int reverb = *(int*)udata;
     I_Printf("Reverb: %d\n", reverb);
+}
+
+static void Effect_Reverb_Done (int chan, void *udata) {
+    delete (int*) udata;
+}
+*/
+
+struct reverb_info_t {
+    SDL_TimerID timer;
+    Mix_Chunk* chunk;
+    int volume;
+    int count;
+    int delay;
+    Uint8 leftPan;
+    Uint8 rightPan;
+};
+
+static uint32 Reverb_Timer_Callback(uint32 interval, void* param) {
+    reverb_info_t* info = (reverb_info_t*) param;
+    if (info->count-- == 0) {
+        SDL_RemoveTimer(info->timer);
+        delete info;
+        return 0;
+    }
+    int curChannel = Mix_PlayChannel(-1, info->chunk, 0);
+    Mix_Volume(curChannel, info->volume / 2);
+    Mix_SetPanning(curChannel, info->leftPan, info->rightPan);
+    info->volume /= 2;
+    return info->delay;
 }
 
 //
@@ -511,7 +542,16 @@ void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb,
     if (fmt == FORMAT_MIDI) {
         Mix_RegisterEffect(curChannel, Effect_MIDIGain, nullptr, nullptr);
     }
-    // Mix_RegisterEffect(curChannel, Effect_Reverb, nullptr, &reverb);
+    if (reverb) {
+        int reverbdelay = 4;
+        int reverbcount = reverb / 8;
+        // Timer ID is unfortunately unknown at this time
+        reverb_info_t* info = new reverb_info_t{0, chunk, volume, reverbcount, reverbdelay, leftPan, rightPan};
+        SDL_TimerID timer = SDL_AddTimer(reverbdelay, Reverb_Timer_Callback, info);
+        info->timer = timer;
+    }
+    // int* rvb = new int{reverb};
+    // Mix_RegisterEffect(curChannel, Effect_Reverb, Effect_Reverb_Done, rvb);
     active_channels.set(curChannel);
     if (origin) {
         sources.insert({origin, curChannel});
