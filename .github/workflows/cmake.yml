@@ -12,10 +12,22 @@ jobs:
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: [ubuntu-20.04, windows-2019]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-18.04]
+      fail-fast: false
+    continue-on-error: true
 
     steps:
     - uses: actions/checkout@v2
+
+    - name: Install Dependencies (Linux)
+      if: ${{ matrix.os != 'windows-latest' }}
+      # The virtual environment already has zlib and libpng set up
+      run: |
+        sudo apt update
+        sudo apt -y install libsdl2-dev libsdl2-mixer-dev libsdl2-net-dev
 
     - name: Create Build Environment
       # Some projects don't allow in-source building, so create a separate build directory
@@ -44,3 +56,12 @@ jobs:
       # Execute tests defined by the CMake configuration.  
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: ctest -C $BUILD_TYPE
+
+    - name: Upload
+      uses: actions/upload-artifact@v2
+      with:
+        name: doom64ex
+        path: |
+          ${{github.workspace}}/build/doom64ex
+          ${{github.workspace}}/build/doom64ex.exe
+          ${{github.workspace}}/build/doom64ex.pk3

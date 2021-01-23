@@ -52,7 +52,7 @@ void S_ResumeSound(void);
 // Start sound for thing at <origin>
 //  using <sound_id> from sounds.h
 //
-void S_StartSound(mobj_t* origin, int sound_id);
+void S_StartSound(mobj_t* origin, int sound_id, uint32 flags = 0);
 
 void S_UpdateSounds(void);
 void S_RemoveOrigin(mobj_t* origin);
@@ -67,7 +67,7 @@ int S_GetActiveSounds(void);
 
 
 // Start music using <music_id> from sounds.h
-void S_StartMusic(int mnum);
+void S_StartMusic(const char* music);
 void S_StopMusic(void);
 
 

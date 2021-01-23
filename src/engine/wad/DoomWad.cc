@@ -88,6 +88,8 @@ namespace {
                       section = wad::Section::graphics;
                   } else if (name == "S_START") {
                       section = wad::Section::sprites;
+                  } else if (name == "DM_START") {
+                      section = wad::Section::music;
                   } else if (name == "DS_START") {
                       section = wad::Section::sounds;
                   } else if (name == "T_END") {
@@ -95,6 +97,8 @@ namespace {
                   } else if (name == "G_END") {
                       section = wad::Section::normal;
                   } else if (name == "S_END") {
+                      section = wad::Section::normal;
+                  } else if (name == "DM_END") {
                       section = wad::Section::normal;
                   } else if (name == "DS_END") {
                       section = wad::Section::normal;
@@ -104,6 +108,7 @@ namespace {
                       println("Unknown WAD directory: {}", name);
                   }
                   continue;
+              } else {
               }
 
               lumps.emplace_back(name, section, table_.size());
@@ -133,6 +138,7 @@ namespace {
 UniquePtr<wad::Format> wad::doom_loader(StringView path)
 {
     std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) { return nullptr; }
     Header header;
     read_into(file, header);
     if (memcmp(header.id, "IWAD", 4) == 0 || memcmp(header.id, "PWAD", 4) == 0) {

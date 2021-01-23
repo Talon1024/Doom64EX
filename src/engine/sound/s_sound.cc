@@ -69,7 +69,7 @@
 
 static dboolean nosound = false;
 static dboolean nomusic = false;
-static int lastmusic = 0;
+static const char* lastmusic = nullptr;
 
 FloatProperty s_sfxvol("s_sfxvol", "", 80.0f, 0,
                        [](const FloatProperty& p, float, float&)
@@ -157,8 +157,9 @@ void S_SetGainOutput(float db) {
 // S_StartMusic
 //
 
+/*
 void S_StartMusic(int mnum) {
-    if(nomusic) {
+    if(nomusic || mnum == lastmusic) {
         return;
     }
 
@@ -169,14 +170,32 @@ void S_StartMusic(int mnum) {
     I_StartMusic(mnum);
     lastmusic = mnum;
 }
+*/
+
+void S_StartMusic(const char* music) {
+    if(*music == 0 || music == lastmusic) {
+        return;
+    }
+
+    int music_len = 0;
+    for (music_len = 0; music_len < 8; music_len++) {
+        if (!music[music_len]) {
+            break;
+        }
+    }
+    String mus_id(music, music_len);
+
+    I_StartMusic(mus_id);
+    lastmusic = music;
+}
 
 //
 // S_StopMusic
 //
 
 void S_StopMusic(void) {
-    I_StopSound(NULL, lastmusic);
-    lastmusic = 0;
+    I_StopMusic();
+    lastmusic = nullptr;
 }
 
 //
@@ -244,6 +263,7 @@ int S_GetActiveSounds(void) {
 //
 
 void S_RemoveOrigin(mobj_t* origin) {
+    /*
     int     channels;
     mobj_t* source;
     int     i;
@@ -256,6 +276,8 @@ void S_RemoveOrigin(mobj_t* origin) {
             I_RemoveSoundSource(i);
         }
     }
+    */
+    I_RemoveSoundSource((sndsrc_t*)origin);
 }
 
 //
@@ -304,7 +326,7 @@ void S_UpdateSounds(void) {
 // S_StartSound
 //
 
-void S_StartSound(mobj_t* origin, int sfx_id) {
+void S_StartSound(mobj_t* origin, int sfx_id, uint32 flags) {
     int volume;
     int sep;
     int reverb;
@@ -339,7 +361,7 @@ void S_StartSound(mobj_t* origin, int sfx_id) {
     }
 
     // Assigns the handle to one of the channels in the mix/output buffer.
-    I_StartSound(sfx_id, (sndsrc_t*)origin, volume, sep, reverb);
+    I_StartSound(sfx_id, (sndsrc_t*)origin, volume, sep, reverb, flags);
 }
 
 //

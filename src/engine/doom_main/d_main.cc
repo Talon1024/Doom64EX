@@ -114,7 +114,7 @@ void D_CheckNetGame(void);
 void D_ProcessEvents(void);
 void G_BuildTiccmd(ticcmd_t* cmd);
 
-bool Audio_LoadTable();
+// bool Audio_LoadTable();
 
 #define STRPAUSED    "Paused"
 
@@ -496,6 +496,8 @@ static bool Title_Ticker(void) {
 // Title_Start
 //
 
+// size_t Seq_SoundLookup(String name);
+
 static void Title_Start(void) {
     gameaction = ga_nothing;
     pagetic = gametic;
@@ -503,7 +505,7 @@ static void Title_Start(void) {
     paused = false;
     allowclearmenu = false;
 
-    S_StartMusic(mus_title);
+    S_StartMusic("MUSTITLE");
     M_StartMainMenu();
 }
 
@@ -1009,9 +1011,6 @@ void D_DoomMain(void) {
 
     I_Printf("R_Init: Init DOOM refresh daemon.\n");
     R_Init();
-
-    I_Printf("Loading SNDTABLE.\n");
-    Audio_LoadTable();
 
     I_Printf("P_Init: Init Playloop state.\n");
     P_Init();

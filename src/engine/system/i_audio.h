@@ -24,6 +24,8 @@
 #define __I_AUDIO_H__
 
 // 20120107 bkw: Linux users can change the default FluidSynth backend here:
+#include "m_fixed.h"
+#include <imp/Prelude>
 #ifndef _WIN32
 #define DEFAULT_FLUID_DRIVER "sndio"
 
@@ -46,7 +48,8 @@ sndsrc_t* I_GetSoundSource(int c);
 void I_InitSequencer(void);
 void I_ShutdownSound(void);
 void I_UpdateChannel(int c, int volume, int pan);
-void I_RemoveSoundSource(int c);
+void I_RemoveSoundSource(int c, bool halt = false);
+void I_RemoveSoundSource(sndsrc_t* origin, bool halt = false);
 void I_SetMusicVolume(float volume);
 void I_SetSoundVolume(float volume);
 void I_ResetSound(void);
@@ -54,7 +57,8 @@ void I_PauseSound(void);
 void I_ResumeSound(void);
 void I_SetGain(float db);
 void I_StopSound(sndsrc_t* origin, int sfx_id);
-void I_StartMusic(int mus_id);
-void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb);
+void I_StartMusic(String &mus_id);
+void I_StopMusic();
+void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb, uint32 flags = 0);
 
 #endif // __I_AUDIO_H__

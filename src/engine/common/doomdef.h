@@ -264,6 +264,10 @@ enum {
     COMPATF_REACHITEMS  = (1 << 3)      // able to grab high items by bumping
 };
 
+enum sndflags_e : uint32 {
+    SFX_LOOP = 1
+};
+
 extern dboolean windowpause;
 
 

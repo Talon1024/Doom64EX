@@ -30,15 +30,8 @@ project(Doom64EX C CXX)
 ##
 
 option(ENABLE_TESTING "Compile unit tests" ON)
-option(ENABLE_SYSTEM_FLUIDSYNTH "Link with system-wide fluidsynth and not fluidsynth-lite" OFF)
 option(ENABLE_GTK3 "Display windows using GTK+3" OFF)
 option(VERSION_DEV "Add git commit hash to window title" ON)
-
-# If fluidsynth-lite wasn't cloned, fall back to using system fluidsynth.
-if(NOT EXISTS "${CMAKE_SOURCE_DIR}/fluidsynth/CMakeLists.txt" AND NOT ENABLE_SYSTEM_FLUIDSYNTH)
-  set(ENABLE_SYSTEM_FLUIDSYNTH ON)
-  message(WARNING "The fluidsynth submodule wasn't initialised. Run `git submodule --init --recursive` to use fluidsynth-lite, or add -DENABLE_SYSTEM_FLUIDSYNTH=ON to use the system-provided FluidSynth library.")
-endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
@@ -103,9 +96,16 @@ configure_file("${CMAKE_SOURCE_DIR}/src/config.hh.in" "${CMAKE_BINARY_DIR}/confi
 ## Dependencies
 ##
 
+if(WIN32)
+  add_subdirectory("${CMAKE_SOURCE_DIR}/extern")
+endif(WIN32)
+
 if (NOT USE_CONAN)
   # SDL2
   find_package(SDL2 REQUIRED)
+
+  # SDL2
+  find_package(SDL2_mixer REQUIRED)
 
   # SDL2_Net
   find_package(SDL2_net REQUIRED)
@@ -115,11 +115,6 @@ if (NOT USE_CONAN)
 
   # libpng
   find_package(PNG REQUIRED)
-
-  # FluidSynth
-  if (ENABLE_SYSTEM_FLUIDSYNTH)
-    find_package(FluidSynth REQUIRED)
-  endif()
 
   # OpenGL
   find_package(OpenGL REQUIRED)
@@ -138,10 +133,6 @@ endif(BUILD_TESTS)
 ##------------------------------------------------------------------------------
 ## Include subprojects
 ##
-
-if(NOT ENABLE_SYSTEM_FLUIDSYNTH)
-  add_subdirectory("${CMAKE_SOURCE_DIR}/fluidsynth")
-endif()
 
 add_subdirectory("${CMAKE_SOURCE_DIR}/src/engine")
 

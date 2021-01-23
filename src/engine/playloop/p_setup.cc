@@ -1152,7 +1152,7 @@ static void P_InitMapInfo(void) {
             //
             mapdef.mapid = 1;
             mapdef.exitdelay = 15;
-            mapdef.music = -1;
+            // mapdef.music = -1;
 
             sc_parser.find(false);  // skip map lump name
 
@@ -1186,12 +1186,11 @@ static void P_InitMapInfo(void) {
                         text = sc_parser.getstring();
 
                         auto lump = wad::find(text);
-                        if(!lump || lump->section() != wad::Section::sounds) {
+                        if(!lump || (lump->section() != wad::Section::sounds && lump->section() != wad::Section::music)) {
                             CON_Warnf("P_InitMapInfo: Invalid music name: %s\n", text);
-                            mapdef.music = -1;
                         }
                         else {
-                            mapdef.music = Seq_SoundLookup(lump->lump_name().to_string());
+                            dstrncpy(mapdef.music, text, 8);
                         }
                     }
                     else if(!dstricmp(sc_parser.token, "COMPAT_COLLISION")) {
@@ -1267,11 +1266,10 @@ static void P_InitMapInfo(void) {
                         text = sc_parser.getstring();
 
                         auto lump = wad::find(text);
-                        if(!lump || lump->section() != wad::Section::sounds) {
+                        if(!lump || (lump->section() != wad::Section::sounds && lump->section() != wad::Section::music)) {
                             CON_Warnf("P_InitMapInfo: Invalid music name: %s\n", text);
-                            cluster.music = -1;
                         } else {
-                            cluster.music = Seq_SoundLookup(lump->lump_name().to_string());
+                            dstrncpy(cluster.music, text, 8);
                         }
                     }
                     //

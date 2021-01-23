@@ -72,10 +72,11 @@ namespace imp {
         textures,
         graphics,
         sprites,
-        sounds
+        sounds,
+        music
     };
 
-    constexpr size_t num_sections = 5;
+    constexpr size_t num_sections = 6;
 
     class BasicLump {
         std::size_t id_;
@@ -193,6 +194,9 @@ namespace imp {
 
       case Section::sounds:
           return "sounds"_sv;
+
+      case Section::music:
+          return "music"_sv;
       }
   }
 }

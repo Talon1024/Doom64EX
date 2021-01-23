@@ -131,7 +131,7 @@ void P_BringUpWeapon(void *data) {
     }
     else if(player->pendingweapon == wp_plasma) {
         pls_buzzing = true;
-        S_StartSound(player->mo, sfx_electric);
+        S_StartSound(player->mo, sfx_electric, SFX_LOOP);
     }
 
     //

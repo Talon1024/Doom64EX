@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cassert>
 #include "WadFormat.hh"
+#include "i_system.h"
 #include "m_misc.h"
 
 namespace {
@@ -53,8 +54,10 @@ gfx::Image wad::Lump::as_image()
 
 void wad::init()
 {
-    if (iwad_path_ && !wad::mount(iwad_path_.get())) {
-        fatal("Could not mount IWAD at {}", iwad_path_.get());
+    if (iwad_path_) {
+        if (!wad::mount(iwad_path_.get())) {
+            fatal("Could not mount IWAD at {}", iwad_path_.get());
+        }
     } else {
         auto path = app::find_data_file("doom64.wad");
         if (!path)
