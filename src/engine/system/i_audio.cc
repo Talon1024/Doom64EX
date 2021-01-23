@@ -266,13 +266,17 @@ void I_InitSequencer() {
 static void I_ChannelFinished(int channel) {
     // I_Printf("Channel %d finished\n", channel);
     active_channels.set(channel, false);
-    auto source = channels.find(channel);
-    if (source != channels.end()) {
+    auto channel_element = channels.find(channel);
+    if (channel_element != channels.end()) {
         // I_Printf("I_ChannelFinished: info refcount %d\n", info.use_count());
-        sndsrc_t* origin = source->second;
-        sources.erase(origin);
-        channels.erase(channel);
+        sndsrc_t* origin = channel_element->second;
+        for (auto source_element = sources.cbegin(); source_element != sources.cend(); source_element++) {
+            if (source_element->first == origin && source_element->second == channel) {
+                sources.erase(source_element);
+            }
+        }
     }
+    channels.erase(channel);
 }
 
 //
