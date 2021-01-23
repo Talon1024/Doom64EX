@@ -1,6 +1,8 @@
 #include <fstream>
 #include <sstream>
 #include "WadFormat.hh"
+#include "doomdef.h"
+#include "imp/Wad"
 
 namespace {
   template <class T>
@@ -80,6 +82,7 @@ namespace {
               std::size_t size {};
               while (size < 8 && dir.name[size]) ++size;
               String name { dir.name, size };
+              wad::Section lumpSection = section;
 
               if (dir.size == 0) {
                   if (name == "T_START") {
@@ -108,10 +111,31 @@ namespace {
                       println("Unknown WAD directory: {}", name);
                   }
                   continue;
-              } else {
+              } else if (section == wad::Section::normal) {
+                  if (dstrncmp(dir.name, "PAL", 3) == 0 && dir.size == 768) {
+                      // It's a palette
+                      lumpSection = wad::Section::normal;
+                  } else {
+                    // Look at the header
+                    size_t prevPos = stream_.tellg();
+                    stream_.seekg(dir.filepos);
+                    char id[4];
+                    stream_.read(id, 4);
+                    if (dstrncmp(id, "\x89PNG", 4) == 0) {
+                        // PNG files go in the graphics section
+                        lumpSection = wad::Section::graphics;
+                    } else if (dstrncmp(id, "MThd", 4) == 0) {
+                        // MIDI - assume it's music
+                        lumpSection = wad::Section::music;
+                    } else if (dstrncmp(id, "RIFF", 4) == 0) {
+                        // WAV file
+                        lumpSection = wad::Section::sounds;
+                    }
+                    stream_.seekg(prevPos);
+                  }
               }
 
-              lumps.emplace_back(name, section, table_.size());
+              lumps.emplace_back(name, lumpSection, table_.size());
               table_.emplace_back(dir.filepos, dir.size);
           }
 
