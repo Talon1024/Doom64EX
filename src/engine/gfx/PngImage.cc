@@ -20,13 +20,71 @@
 //
 //-----------------------------------------------------------------------------
 
+#include "doomdef.h"
+#include "imp/Pixel"
+#include "imp/util/Types"
 #include <cstring>
 #include <imp/Image>
 #include <imp/util/Endian>
+#include <istream>
+#include <zlib.h>
 #include <png.h>
 
 namespace {
   constexpr const char magic[] = "\x89PNG\r\n\x1a\n";
+
+  struct PngChunk {
+      size_t length;
+      char id[4];
+      byte* data {nullptr};
+      size_t crc;
+      bool verify_crc() {
+          return crc32(crc, (Bytef*)id, length + 4) == crc;
+      }
+      void read(std::istream &s) {
+          size_t num;
+          char buffer[4];
+          // Read data
+          data = new byte[length];
+          s.read((char*)data, length);
+          // Read CRC
+          s.read(buffer, 4);
+          num = *((size_t*)buffer);
+          crc = big_endian(num);
+      }
+      void skip(std::istream &s) {
+          s.seekg((size_t)s.tellg() + length + 4);
+      }
+  };
+
+  PngChunk* read_chunk_head(std::istream &s) {
+      PngChunk* chunk = new PngChunk;
+      size_t num;
+      char buffer[4];
+      // Read length
+      s.read(buffer, 4);
+      num = *((size_t*)buffer);
+      chunk->length = big_endian(num);
+      // Read ID
+      s.read(buffer, 4);
+      dmemcpy(chunk->id, buffer, 4);
+      return chunk;
+  }
+
+  PngChunk* read_whole_chunk(std::istream &s) {
+      PngChunk* chunk = read_chunk_head(s);
+      chunk->read(s);
+      // Verify CRC
+      if (!chunk->verify_crc()) {
+          std::fprintf(stderr, "WARNING: CRC invalid for chunk %.4s!\n", chunk->id);
+      }
+      return chunk;
+  }
+
+  void free_chunk(PngChunk* chunk) {
+      delete[] chunk->data;
+      delete chunk;
+  }
 
   struct PngImage : ImageFormatIO {
       StringView mimetype() const override;
@@ -48,138 +106,97 @@ namespace {
 
   Image PngImage::load(std::istream &s) const
   {
-      png_structp png_ptr = nullptr;
-      png_infop infop = nullptr;
-      auto _guard = make_guard([&png_ptr, &infop]()
-                               {
-                                   png_structpp png_ptrp = png_ptr ? &png_ptr : nullptr;
-                                   png_infopp infopp = infop ? &infop : nullptr;
-                                   png_destroy_read_struct(png_ptrp, infopp, nullptr);
-                               });
-
-      png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, 0, 0, 0);
-      if (png_ptr == nullptr)
-          throw ImageLoadError("Failed to create PNG read struct");
-
-      infop = png_create_info_struct(png_ptr);
-      if (infop == nullptr)
-      {
-          png_destroy_read_struct(&png_ptr, nullptr, nullptr);
-          throw ImageLoadError("Failed to create PNG info struct");
-      }
-
-      if (setjmp(png_jmpbuf(png_ptr)))
-      {
-          png_destroy_read_struct(&png_ptr, &infop, nullptr);
-          throw ImageLoadError("An error occurred in libpng");
-      }
-
-      png_set_read_fn(png_ptr, &s,
-                      [](png_structp ctx, png_bytep area, png_size_t size) {
-                          auto s = static_cast<std::istream *>(png_get_io_ptr(ctx));
-                          s->read(reinterpret_cast<char *>(area), size);
-                      });
-
-      /* Grab offset information if available. This seems like a hack since this is
-       * probably only used by Doom64EX and not a general thing as this file might imply. */
+      s.seekg(sizeof magic);
+      size_t width, height;
+      byte bitDepth, colorType, compressionMethod, filterMethod, interlaceMethod;
       SpriteOffsets offsets;
-      auto chunkFn = [](png_structp png_ptr, png_unknown_chunkp chunk) -> int {
-          if (std::strncmp((char*)chunk->name, "grAb", 4) == 0 && chunk->size >= 8) {
-              auto offsets = reinterpret_cast<SpriteOffsets*>(png_get_user_chunk_ptr(png_ptr));
-              auto data = reinterpret_cast<int*>(chunk->data);
-              offsets->x = big_endian(data[0]);
-              offsets->y = big_endian(data[1]);
-              return 1;
-          }
-
-          return 0;
-      };
-      png_set_read_user_chunk_fn(png_ptr, &offsets, chunkFn);
-
-      png_uint_32 width, height;
-      int bitDepth, colorType, interlaceMethod;
-      png_read_info(png_ptr, infop);
-      png_get_IHDR(png_ptr, infop, &width, &height, &bitDepth, &colorType, &interlaceMethod, nullptr, nullptr);
-
-      png_uint_32 sizeLimit = std::numeric_limits<uint16>::max();
-      if (width < 1 || width > sizeLimit || height < 1 || height > sizeLimit)
-          throw ImageLoadError(fmt::format("Invalid image dimensions: {}x{}", width, height));
-
-      png_set_strip_16(png_ptr);
-      png_set_packing(png_ptr);
-      png_set_interlace_handling(png_ptr);
-
-      if (colorType == PNG_COLOR_TYPE_GRAY)
-          png_set_expand(png_ptr);
-
-      if (colorType == PNG_COLOR_TYPE_GRAY_ALPHA)
-          png_set_gray_to_rgb(png_ptr);
-
-      png_read_update_info(png_ptr, infop);
-      png_get_IHDR(png_ptr, infop, &width, &height, &bitDepth, &colorType, &interlaceMethod, nullptr, nullptr);
-
-      PixelFormat format;
-      switch (colorType) {
-          case PNG_COLOR_TYPE_RGB:
-              format = PixelFormat::rgb;
-              break;
-
-          case PNG_COLOR_TYPE_RGB_ALPHA:
-              format = PixelFormat::rgba;
-              break;
-
-          case PNG_COLOR_TYPE_PALETTE:
-              switch (bitDepth) {
-              case 8:
-                  format = PixelFormat::index8;
-                  break;
-
-              default:
-                  throw ImageLoadError(fmt::format("Invalid PNG bit depth: {}", bitDepth));
-              }
-              break;
-
-          default:
-              throw ImageLoadError(fmt::format("Unknown PNG image color type: {}", colorType));
+      PixelFormat format = PixelFormat::none;
+      {
+          // Should be IHDR - the PNG specification says IHDR is the very first 
+          // chunk in a PNG file
+          PngChunk* chunk = read_whole_chunk(s);
+          width = big_endian(*((size_t*)chunk->data));
+          height = big_endian(*((size_t*)chunk->data + 4));
+          bitDepth = *(chunk->data + 8);
+          colorType = *(chunk->data + 9);
+          compressionMethod = *(chunk->data + 10);
+          filterMethod = *(chunk->data + 11);
+          interlaceMethod = *(chunk->data + 12);
+          free_chunk(chunk);
       }
+      if (colorType == 3) {
+          format = PixelFormat::index8;
+      } else if (colorType == 2) {
+          format = PixelFormat::rgb;
+      } else if (colorType == 6) {
+          format = PixelFormat::rgba;
+      }
+      byte* paldata = nullptr;
+      size_t palsize = 0;
+      byte* transparency = nullptr;
+      size_t transsize = 0;
+      while (1) {
+          PngChunk* chunk = read_chunk_head(s);
+          if (dstrncmp(chunk->id, "grAb", 4) == 0) {
+              // Offsets
+              chunk->read(s);
+              offsets.x = big_endian(*((int*)chunk->data));
+              offsets.y = big_endian(*((int*)chunk->data + 4));
+          } else if (dstrncmp(chunk->id, "PLTE", 4) == 0) {
+              // Palette
+              chunk->read(s);
+              palsize = chunk->length / 3;
+              paldata = new byte[palsize];
+              dmemcpy(paldata, chunk->data, chunk->length);
+          } else if (dstrncmp(chunk->id, "tRNS", 4) == 0) {
+              // Transparency info
+              chunk->read(s);
+              transsize = chunk->length;
+              transparency = new byte[transsize];
+              dmemcpy(transparency, chunk->data, transsize);
+          } else if (dstrncmp(chunk->id, "IDAT", 4) == 0) {
+              free_chunk(chunk);
+              break;
+          }
+          // I don't care about any other chunk
+          chunk->skip(s);
+          free_chunk(chunk);
+      }
+
+      // An IDAT chunk has been reached!
+      s.seekg((size_t)s.tellg() - 8);
 
       Image retval(format, static_cast<uint16>(width), static_cast<uint16>(height), noinit_tag());
 
-      if (colorType == PNG_COLOR_TYPE_PALETTE)
+      if (colorType == 3)
       {
-          if (png_get_valid(png_ptr, infop, PNG_INFO_tRNS))
+          if (transsize > 0)
           {
-              png_bytep alpha;
-              png_colorp colors;
-              int palNum, transNum;
-              png_get_tRNS(png_ptr, infop, &alpha, &transNum, nullptr);
-              png_get_PLTE(png_ptr, infop, &colors, &palNum);
-              Palette palette(PixelFormat::rgba, palNum, nullptr);
+              Palette palette(PixelFormat::rgba, palsize, nullptr);
 
               int i = 0;
+              byte* palp = paldata;
               for (auto &c : palette.map<Rgba>())
               {
-                  c.red   = colors[i].red;
-                  c.green = colors[i].green;
-                  c.blue  = colors[i].blue;
-                  c.alpha = i < transNum ? alpha[i] : 0xff;
-
+                  c.red   = palp[0];
+                  c.green = palp[1];
+                  c.blue  = palp[2];
+                  c.alpha = i < transsize ? transparency[i] : 0xff;
+                  palp += 3;
                   i++;
               }
 
               retval.set_palette(std::move(palette));
           } else {
-              png_colorp pal = nullptr;
-              int palNum = 0;
-              png_get_PLTE(png_ptr, infop, &pal, &palNum);
-              Palette palette(PixelFormat::rgb, palNum, nullptr);
+              byte* palp = paldata;
+              Palette palette(PixelFormat::rgb, palsize, nullptr);
 
               for (auto &c : palette.map<Rgb>())
               {
-                  auto p = *pal++;
-                  c.red = p.red;
-                  c.green = p.green;
-                  c.blue = p.blue;
+                  c.red   = palp[0];
+                  c.green = palp[1];
+                  c.blue  = palp[2];
+                  palp += 3;
               }
 
               retval.set_palette(std::move(palette));
@@ -188,12 +205,14 @@ namespace {
 
       retval.set_offsets(offsets);
 
-	  auto scanlines = std::make_unique<byte*[]>(height);
+      auto scanlines = std::make_unique<byte*[]>(height);
       for (size_t i = 0; i < height; i++)
           scanlines[i] = retval.scanline_ptr(i);
 
-      png_read_image(png_ptr, scanlines.get());
-      png_read_end(png_ptr, infop);
+      // Decompress, defilter, deinterlace
+      if (compressionMethod == 0) {
+          //
+      }
 
       return retval;
   }
