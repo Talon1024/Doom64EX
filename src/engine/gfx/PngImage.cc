@@ -33,37 +33,47 @@
 namespace {
   constexpr const char magic[] = "\x89PNG\r\n\x1a\n";
 
+  #define CHECK_CRC(chunk) if (!chunk->verify_crc()) {\
+      std::fprintf(stderr, "%s:%d WARNING: CRC invalid for chunk %.4s\n",__FILE__, __LINE__, chunk->id);\
+  }
+
   struct PngChunk {
-      size_t length;
+      uint32 length;
       char id[4];
       byte* data {nullptr};
-      size_t crc;
+      uint32 crc;
       bool verify_crc() {
-          return crc32(crc, (Bytef*)id, length + 4) == crc;
+          byte* buffer = new byte[length + 4];
+          dmemcpy(buffer, id, 4);
+          dmemcpy(buffer + 4, data, length);
+          bool valid = crc == crc32(0, buffer, length + 4);
+          delete[] buffer;
+          return valid;
       }
       void read(std::istream &s) {
-          size_t num;
+          uint32 num;
           char buffer[4];
           // Read data
           data = new byte[length];
           s.read((char*)data, length);
           // Read CRC
           s.read(buffer, 4);
-          num = *((size_t*)buffer);
+          num = *(uint32*)buffer;
           crc = big_endian(num);
       }
       void skip(std::istream &s) {
+          // Assuming name and length have already been read...
           s.seekg((size_t)s.tellg() + length + 4);
       }
   };
 
   PngChunk* read_chunk_head(std::istream &s) {
       PngChunk* chunk = new PngChunk;
-      size_t num;
+      uint32 num;
       char buffer[4];
       // Read length
       s.read(buffer, 4);
-      num = *((size_t*)buffer);
+      num = *(uint32*)buffer;
       chunk->length = big_endian(num);
       // Read ID
       s.read(buffer, 4);
@@ -74,15 +84,13 @@ namespace {
   PngChunk* read_whole_chunk(std::istream &s) {
       PngChunk* chunk = read_chunk_head(s);
       chunk->read(s);
-      // Verify CRC
-      if (!chunk->verify_crc()) {
-          std::fprintf(stderr, "WARNING: CRC invalid for chunk %.4s!\n", chunk->id);
-      }
       return chunk;
   }
 
   void free_chunk(PngChunk* chunk) {
-      delete[] chunk->data;
+      if (chunk->data) {
+          delete[] chunk->data;
+      }
       delete chunk;
   }
 
@@ -106,8 +114,8 @@ namespace {
 
   Image PngImage::load(std::istream &s) const
   {
-      s.seekg(sizeof magic);
-      size_t width, height;
+      s.seekg(8);
+      uint32 width, height;
       byte bitDepth, colorType, compressionMethod, filterMethod, interlaceMethod;
       SpriteOffsets offsets;
       PixelFormat format = PixelFormat::none;
@@ -115,8 +123,9 @@ namespace {
           // Should be IHDR - the PNG specification says IHDR is the very first 
           // chunk in a PNG file
           PngChunk* chunk = read_whole_chunk(s);
-          width = big_endian(*((size_t*)chunk->data));
-          height = big_endian(*((size_t*)chunk->data + 4));
+          CHECK_CRC(chunk);
+          width = big_endian(*((uint32*)(chunk->data)));
+          height = big_endian(*((uint32*)(chunk->data + 4)));
           bitDepth = *(chunk->data + 8);
           colorType = *(chunk->data + 9);
           compressionMethod = *(chunk->data + 10);
@@ -135,31 +144,38 @@ namespace {
       size_t palsize = 0;
       byte* transparency = nullptr;
       size_t transsize = 0;
-      while (1) {
+      while (!s.eof()) {
           PngChunk* chunk = read_chunk_head(s);
           if (dstrncmp(chunk->id, "grAb", 4) == 0) {
               // Offsets
               chunk->read(s);
-              offsets.x = big_endian(*((int*)chunk->data));
-              offsets.y = big_endian(*((int*)chunk->data + 4));
+              CHECK_CRC(chunk);
+              offsets.x = big_endian(*((int32*)(chunk->data)));
+              offsets.y = big_endian(*((int32*)(chunk->data + 4)));
           } else if (dstrncmp(chunk->id, "PLTE", 4) == 0) {
               // Palette
               chunk->read(s);
+              CHECK_CRC(chunk);
               palsize = chunk->length / 3;
-              paldata = new byte[palsize];
+              paldata = new byte[chunk->length];
               dmemcpy(paldata, chunk->data, chunk->length);
           } else if (dstrncmp(chunk->id, "tRNS", 4) == 0) {
               // Transparency info
               chunk->read(s);
+              CHECK_CRC(chunk);
               transsize = chunk->length;
               transparency = new byte[transsize];
               dmemcpy(transparency, chunk->data, transsize);
           } else if (dstrncmp(chunk->id, "IDAT", 4) == 0) {
               free_chunk(chunk);
               break;
+          } else if (dstrncmp(chunk->id, "IEND", 4) == 0) {
+              free_chunk(chunk);
+              break;
+          } else {
+              // I don't care about any other chunk
+              chunk->skip(s);
           }
-          // I don't care about any other chunk
-          chunk->skip(s);
           free_chunk(chunk);
       }
 
@@ -170,7 +186,7 @@ namespace {
 
       if (colorType == 3)
       {
-          if (transsize > 0)
+          if (transsize)
           {
               Palette palette(PixelFormat::rgba, palsize, nullptr);
 
@@ -187,6 +203,7 @@ namespace {
               }
 
               retval.set_palette(std::move(palette));
+              delete[] transparency;
           } else {
               byte* palp = paldata;
               Palette palette(PixelFormat::rgb, palsize, nullptr);
@@ -201,6 +218,7 @@ namespace {
 
               retval.set_palette(std::move(palette));
           }
+          delete[] paldata;
       }
 
       retval.set_offsets(offsets);
@@ -210,9 +228,34 @@ namespace {
           scanlines[i] = retval.scanline_ptr(i);
 
       // Decompress, defilter, deinterlace
+      /*
       if (compressionMethod == 0) {
-          //
-      }
+          // Concatenate all IDAT chunks
+          Bytef* compressed {nullptr};
+          size_t compressedBytes = 0;
+          while(1) {
+              PngChunk* chunk = read_chunk_head(s);
+              if (dstrncmp(chunk->id, "IDAT", 4) == 0) {
+                  chunk->read(s);
+                  Bytef* previous = compressed;
+                  size_t previousLength = compressedBytes;
+                  compressedBytes += chunk->length;
+                  compressed = new Bytef[compressedBytes];
+                  dmemcpy(compressed, previous, previousLength);
+                  if (previous) {
+                      delete[] previous;
+                  }
+                  dmemcpy(compressed + previousLength, chunk->data, chunk->length);
+              } else if (dstrncmp(chunk->id, "IEND", 4) == 0) {
+                  free_chunk(chunk);
+                  break;
+              }
+              free_chunk(chunk);
+          }
+      } else {
+          std::printf("ERROR: Unsupported compression method %d\n", compressionMethod);
+          return Image(PixelFormat::rgb, 1, 1, noinit_tag());
+      }*/
 
       return retval;
   }
