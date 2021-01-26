@@ -36,6 +36,9 @@ namespace {
   #define CHECK_CRC(chunk) if (!chunk->verify_crc()) {\
       std::fprintf(stderr, "%s:%d WARNING: CRC invalid for chunk %.4s\n",__FILE__, __LINE__, chunk->id);\
   }
+  #define PNG_DECOMPRESS_BUFFER_SIZE 16384
+
+  // PngChunk struct stuff
 
   struct PngChunk {
       uint32 length;
@@ -94,6 +97,16 @@ namespace {
       delete chunk;
   }
 
+  // PNG filtering
+
+  // Expand scan lines with bit depth < 8 to bit depth = 8
+
+  void expand_scanline(byte* scanline, byte bitDepth, byte channels, size_t width) {
+      size_t stride = (bitDepth * width) >> 3;
+  }
+
+  // PngImage class definition
+
   struct PngImage : ImageFormatIO {
       StringView mimetype() const override;
       bool is_format(std::istream &) const override;
@@ -116,7 +129,7 @@ namespace {
   {
       s.seekg(8);
       uint32 width, height;
-      byte bitDepth, colorType, compressionMethod, filterMethod, interlaceMethod;
+      byte bitDepth, colorType, compressionMethod, filterMethod, interlaceMethod, channels = 0;
       SpriteOffsets offsets;
       PixelFormat format = PixelFormat::none;
       {
@@ -135,10 +148,16 @@ namespace {
       }
       if (colorType == 3) {
           format = PixelFormat::index8;
+          channels = 1;
       } else if (colorType == 2) {
           format = PixelFormat::rgb;
+          channels = 3;
       } else if (colorType == 6) {
           format = PixelFormat::rgba;
+          channels = 4;
+      } else {
+          std::fprintf(stderr, "ERROR: Unknown or unsupported color type %d\n", colorType);
+          return Image(PixelFormat::rgb, 1, 1, noinit_tag());
       }
       byte* paldata = nullptr;
       size_t palsize = 0;
@@ -224,38 +243,88 @@ namespace {
       retval.set_offsets(offsets);
 
       auto scanlines = std::make_unique<byte*[]>(height);
+      byte* filters = new byte[height];
       for (size_t i = 0; i < height; i++)
           scanlines[i] = retval.scanline_ptr(i);
 
+      // Add 1 byte for the "filter" byte
+      size_t stride = bitDepth * width * channels / 8 + 1;
+
       // Decompress, defilter, deinterlace
-      /*
       if (compressionMethod == 0) {
-          // Concatenate all IDAT chunks
-          Bytef* compressed {nullptr};
-          size_t compressedBytes = 0;
-          while(1) {
-              PngChunk* chunk = read_chunk_head(s);
+          // Decompress
+          bool iend = false;
+          Bytef uncompressed[PNG_DECOMPRESS_BUFFER_SIZE];
+          size_t data_pos = 0;
+          do {
+              PngChunk* chunk = read_whole_chunk(s);
+              CHECK_CRC(chunk);
               if (dstrncmp(chunk->id, "IDAT", 4) == 0) {
-                  chunk->read(s);
-                  Bytef* previous = compressed;
-                  size_t previousLength = compressedBytes;
-                  compressedBytes += chunk->length;
-                  compressed = new Bytef[compressedBytes];
-                  dmemcpy(compressed, previous, previousLength);
-                  if (previous) {
-                      delete[] previous;
+                  z_stream stream{};
+                  if(inflateInit(&stream) != Z_OK) {
+                      std::printf("ERROR: ZLib failed to initialize inflate!\n");
+                      delete[] filters;
+                      return Image(PixelFormat::rgb, 1, 1, noinit_tag());
                   }
-                  dmemcpy(compressed + previousLength, chunk->data, chunk->length);
+                  size_t row_index = 0;
+                  size_t row_pos = 0;
+                  do {
+                      stream.avail_in = chunk->length;
+                      stream.next_in = chunk->data;
+                      stream.avail_out = PNG_DECOMPRESS_BUFFER_SIZE;
+                      stream.next_out = uncompressed;
+                      int status = inflate(&stream, Z_NO_FLUSH);
+                      assert(status != Z_STREAM_ERROR);  /* state not clobbered */
+                      switch (status) {
+                      case Z_NEED_DICT:
+                          status = Z_DATA_ERROR;     /* and fall through */
+                      case Z_DATA_ERROR:
+                      case Z_MEM_ERROR:
+                          inflateEnd(&stream);
+                          return Image(PixelFormat::rgb, 1, 1, noinit_tag());
+                      }
+                      // Process data
+                      size_t have = PNG_DECOMPRESS_BUFFER_SIZE - stream.avail_out;
+                      for (size_t i = 0; i < have; i++) {
+                          // Assign to scanlines
+                          if (data_pos % stride == 0) {
+                              if (data_pos > 0) {
+                                  row_index++;
+                              }
+                              filters[row_index] = uncompressed[i];
+                          } else {
+                              scanlines[row_index][row_pos] = uncompressed[i];
+                          }
+                          row_pos = data_pos % stride;
+                          data_pos++;
+                      }
+                  } while (stream.avail_out == 0);
+                  inflateEnd(&stream);
               } else if (dstrncmp(chunk->id, "IEND", 4) == 0) {
-                  free_chunk(chunk);
-                  break;
+                  iend = true;
               }
-              free_chunk(chunk);
-          }
+          } while (!iend);
       } else {
           std::printf("ERROR: Unsupported compression method %d\n", compressionMethod);
+          delete[] filters;
           return Image(PixelFormat::rgb, 1, 1, noinit_tag());
-      }*/
+      }
+      if (filterMethod != 0) {
+          delete[] filters;
+          std::fprintf(stderr, "WARNING: Unsupported filter method %d\n", filterMethod);
+      } else {
+          for (size_t row = 0; row < height; row++) {
+              byte filterType = filters[row];
+              if (filterType != 0) {
+                  std::fprintf(stderr, "WARNING: Unsupported filter algorithm %d\n", filterType);
+                  continue;
+              }
+          }
+      }
+      delete[] filters;
+      if (interlaceMethod != 0) {
+          std::fprintf(stderr, "WARNING: Unsupported interlace method %d\n", interlaceMethod);
+      }
 
       return retval;
   }
