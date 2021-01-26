@@ -1,22 +1,23 @@
-Doom64EX [![Build Status](https://travis-ci.org/svkaiser/Doom64EX.svg?branch=master)](https://travis-ci.org/svkaiser/Doom64EX) [![Build status](https://ci.appveyor.com/api/projects/status/04kswu014uwrljrd/branch/master?svg=true)](https://ci.appveyor.com/project/dotfloat/doom64ex/branch/master)
-========
+Doom 64 EX [![Build Status](https://travis-ci.org/svkaiser/Doom64EX.svg?branch=master)](https://travis-ci.org/svkaiser/Doom64EX) [![Build status](https://ci.appveyor.com/api/projects/status/04kswu014uwrljrd/branch/master?svg=true)](https://ci.appveyor.com/project/dotfloat/doom64ex/branch/master)
+==========
 
-Doom64EX is a reverse-engineering project aimed to recreate Doom64 as close as
-possible with additional modding features.
+This is a modified/improved version of Doom 64 EX, with compatibility for the Doom 64 Steam rerelease. It is for:
 
-**NOTICE 2nd February 2017** The supplementary data file `kex.wad` has been
-renamed to `doom64ex.pk3`.
+- Linux gamers who prefer native executables over using WINE/Proton
+- People who don't want to resort to piracy to obtain a copy of Doom 64
+- People who would rather play their legally purchased copy of Doom 64 from Steam on Doom 64 EX
+- People who miss freelook in the Doom 64 Steam rerelease
+- People who want to play PWADs made for Doom 64 EX
 
 # Installing
 
-At the moment there are no official binary builds. You can find older
-versions [here](https://doom64ex.wordpress.com/downloads/).
+You can download GNU/Linux binary build artifacts by clicking on the checkmark next to a commit, and viewing the build for Ubuntu 18.04 or Ubuntu 20.04. If you are logged in, you will be able to see and download "artifacts" from the build process.
+
+At the moment, there are no binary builds for Windows. You can find older versions [here](https://doom64ex.wordpress.com/downloads/). However, these are not compatible with the Doom 64 rerelease.
 
 # Compiling
 
-It's possible to compile Doom64EX yourself. Officially, only Linux, Windows and
-macOS are supported. Patches for alternative operating system are gladly
-accepted, however.
+It's possible to compile Doom 64 EX yourself. Officially, only Linux is supported. Unfortunately, since the recent addition of SDL_mixer, I've been having a lot of trouble with the Windows build. Patches for alternative operating systems are gladly accepted, however.
 
 ## Dependencies
 
@@ -27,26 +28,11 @@ accepted, however.
 | [SDL2](http://libsdl.org/download-2.0.php)           | libsdl2-dev       | SDL2-devel       | sdl2                                                    | sdl2                                        |
 | [SDL2_net](https://www.libsdl.org/projects/SDL_net/) | libsdl2-net-dev   | SDL2_net-devel   | sdl2_net                                                | sdl2_net                                    |
 | [zlib](http://www.zlib.net/)                         | zlib1g-dev        | zlib-devel       | zlib                                                    | zlib                                        |
-| [libpng](http://www.libpng.org/pub/png/libpng.html)  | libpng-dev        | libpng-devel     | libpng                                                  | libpng                                      |
-| [FluidSynth**](http://www.fluidsynth.org/)           | libfluidsynth-dev | fluidsynth-devel | fluidsynth                                              | N/A                                         |
+| [SDL2_mixer](http://libsdl.org/projects/SDL_mixer)   | libsdl2-mixer-dev | SDL2_mixer-devel | sdl2_mixer                                              | sdl2_mixer                                  |
 
 \* MSYS2 uses a naming convention similar to the one utilised by Arch, except
 packages are prefixed with `mingw-w64-i686-` and `mingw-w64-x86_64-` for 32-bit
 and 64-bit packages, respectively.
-
-\** FluidSynth is optional.
-The [fluidsynth-lite](https://github.com/dotfloat/fluidsynth-lite) fork can be
-used instead.
-
-Note: You may also need to install dynamic libraries separately.
-
-## Using the system-provided FluidSynth library
-
-Doom64EX uses [fluidsynth-lite](https://github.com/dotfloat/fluidsynth-lite) to
-reduce the number of dependencies. If you wish to use FluidSynth as provided by
-your package-manager, add `-DENABLE_SYSTEM_FLUIDSYNTH=ON` as a cmake argument.
-
-    $ cmake -DENABLE_SYSTEM_FLUIDSYNTH=ON ..
 
 ## Compiling on Linux
 
@@ -56,15 +42,11 @@ All of these steps are done using the terminal.
 
 On Ubuntu:
 
-    $ # Add additional toolchains
-    $ sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-    $ sudo apt update
-    
     $ # Install GCC
     $ sudo apt install build-essential gcc-6 g++-6
-    
+
     $ # Install dependencies
-    $ sudo apt install git cmake libsdl2-dev libsdl2-net-dev zlib1g-dev libpng-dev
+    $ sudo apt install git cmake libsdl2-dev libsdl2-net-dev zlib1g-dev libsdl2-mixer-dev
 
 On Fedora:
 
@@ -72,12 +54,12 @@ On Fedora:
     $ sudo dnf groupinstall "Development Tools and Libraries"
     
     $ # Install dependencies
-    $ sudo dnf install git cmake sdl2-devel sdl2_net-devel zlib-devel libpng-devel
+    $ sudo dnf install git cmake sdl2-devel sdl2_net-devel zlib-devel SDL2_mixer-devel
     
 On Arch Linux:
 
     $ # Install dependencies
-    $ sudo pacman -S git gcc cmake sdl2 sdl2_net zlib libpng
+    $ sudo pacman -S git gcc cmake sdl2 sdl2_net zlib sdl2_mixer
 
 ### Clone and Build
 
@@ -106,7 +88,7 @@ need to create the `doom64ex.pk3` file manually.
 Download and install [CMAKE](https://cmake.org/download/). Follow the instructions on
 the website and make sure to update the system. Clone the repository in a suitable place to build the program.
 
-Next, download the [Win32 Dependencies](https://github.com/svkaiser/Doom64EX/releases/download/win32dep-2018-04-11/Doom64EX-deps-win32-2018-04-11.zip). Extract the archive into the `extern` directory. Also remember to clone [fluidsynth-lite](https://github.com/dotfloat/fluidsynth-lite) and generate the `.lib` and `.dll` files. Place these in `extern\lib` and `extern\bin`, respectively.
+Next, download the [Win32 Dependencies](https://github.com/svkaiser/Doom64EX/releases/download/win32dep-2018-04-11/Doom64EX-deps-win32-2018-04-11.zip). Extract the archive into the `extern` directory, and generate the `.lib` and `.dll` files. Place these in `extern\lib` and `extern\bin`, respectively.
 
 Next, generate the MSVC project files.
 
@@ -125,7 +107,7 @@ use other package managers, but Doom64EX has only been tested with Homebrew.
 Open `Terminal.app` (or a terminal replacement).
 
     $ # Install dependencies
-    $ brew install git cmake sdl2 sdl2_net libpng zlib
+    $ brew install git cmake sdl2 sdl2_net sdl2_mixer zlib
     
 Find a suitable place to build the program and navigate there using terminal.
 
@@ -150,21 +132,19 @@ If for some reason CMake refuses to automatically generate the required
 
 ## Data Files
 
-The data files required by Doom64EX to function are:
+Doom 64 EX can generate an sf2 soundfont and IWAD from a Doom 64 ROM, or it can use the Doom 64 IWAD from the [Doom 64 Steam rerelease](https://store.steampowered.com/app/1148590/DOOM_64/).
 
-* `doom64ex.pk3` (Generated by cmake)
-* `doom64.wad`
-* `doomsnd.sf2`
+If you have a Doom 64 ROM, you can run:
 
-To generate the two latter files, acquire a Doom64 ROM and run:
+    $ ./doom64ex -wadgen PATH_TO_ROM
 
-    $ doom64ex -wadgen PATH_TO_ROM
+This will generate an IWAD (doom64.wad), and a soundfont (doomsnd.sf2). You will also need doom64ex.pk3 in the working directory.
 
-This will generate the required files and place them somewhere where Doom64EX
-can find them.
+To use the IWAD from the Doom 64 Steam rerelease, run Doom 64 EX as such:
 
-Doom64EX needs the Doom 64 data to be present in any of the following
-directories.
+    $ ./doom64ex -iwad DOOM64.WAD
+
+If you don't hear any music or background sound, open the console, set "s_soundfont" to DOOMSND.DLS, and restart the game. This will only work if you have fluidsynth 2.0 or greater, and libinstpatch installed.
 
 ### On Linux and BSDs
 
