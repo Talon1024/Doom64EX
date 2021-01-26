@@ -1,0 +1,47 @@
+diff --git a/pngrutil.c b/pngrutil.c
+index d5fa08c39..f43eb89b3 100644
+--- a/pngrutil.c
++++ b/pngrutil.c
+@@ -913,7 +913,7 @@ void /* PRIVATE */
+ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ {
+    png_color palette[PNG_MAX_PALETTE_LENGTH];
+-   int max_palette_length, num, i;
++   int num, i;
+ #ifdef PNG_POINTER_INDEXING_SUPPORTED
+    png_colorp pal_ptr;
+ #endif
+@@ -974,19 +974,6 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+    /* The cast is safe because 'length' is less than 3*PNG_MAX_PALETTE_LENGTH */
+    num = (int)length / 3;
+ 
+-   /* If the palette has 256 or fewer entries but is too large for the bit
+-    * depth, we don't issue an error, to preserve the behavior of previous
+-    * libpng versions. We silently truncate the unused extra palette entries
+-    * here.
+-    */
+-   if (png_ptr->color_type == PNG_COLOR_TYPE_PALETTE)
+-      max_palette_length = (1 << png_ptr->bit_depth);
+-   else
+-      max_palette_length = PNG_MAX_PALETTE_LENGTH;
+-
+-   if (num > max_palette_length)
+-      num = max_palette_length;
+-
+ #ifdef PNG_POINTER_INDEXING_SUPPORTED
+    for (i = 0, pal_ptr = palette; i < num; i++, pal_ptr++)
+    {
+diff --git a/pngset.c b/pngset.c
+index ec75dbe36..a56b9a2d0 100644
+--- a/pngset.c
++++ b/pngset.c
+@@ -580,8 +580,7 @@ png_set_PLTE(png_structrp png_ptr, png_inforp info_ptr,
+    if (png_ptr == NULL || info_ptr == NULL)
+       return;
+ 
+-   max_palette_length = (info_ptr->color_type == PNG_COLOR_TYPE_PALETTE) ?
+-      (1 << info_ptr->bit_depth) : PNG_MAX_PALETTE_LENGTH;
++   max_palette_length = PNG_MAX_PALETTE_LENGTH;
+ 
+    if (num_palette < 0 || num_palette > (int) max_palette_length)
+    {
