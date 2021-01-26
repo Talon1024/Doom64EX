@@ -104,7 +104,7 @@ if (NOT USE_CONAN)
   # SDL2
   find_package(SDL2 REQUIRED)
 
-  # SDL2
+  # SDL2_Mixer
   find_package(SDL2_mixer REQUIRED)
 
   # SDL2_Net
@@ -114,7 +114,14 @@ if (NOT USE_CONAN)
   find_package(ZLIB REQUIRED)
 
   # libpng
-  find_package(PNG REQUIRED)
+  set(PNG_STATIC ON)
+  set(PNG_SHARED OFF)
+  add_subdirectory("${CMAKE_SOURCE_DIR}/libpng")
+  execute_process(
+    COMMAND patch
+    INPUT_FILE "${CMAKE_SOURCE_DIR}/dont_truncate_palettes.patch"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/libpng"
+  )
 
   # OpenGL
   find_package(OpenGL REQUIRED)
