@@ -483,17 +483,6 @@ static void Effect_MIDIGain (int chan, void *stream, int len, void *udata) {
 }
 
 /*
-// Causes crashes for some reason...
-static void Effect_Reverb (int chan, void *stream, int len, void *udata) {
-    int reverb = *(int*)udata;
-    I_Printf("Reverb: %d\n", reverb);
-}
-
-static void Effect_Reverb_Done (int chan, void *udata) {
-    delete (int*) udata;
-}
-*/
-
 struct reverb_info_t {
     SDL_TimerID timer;
     Mix_Chunk* chunk;
@@ -517,6 +506,7 @@ static uint32 Reverb_Timer_Callback(uint32 interval, void* param) {
     info->volume /= 2;
     return info->delay;
 }
+*/
 
 //
 // I_StartSound
@@ -542,21 +532,19 @@ void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb,
     if (fmt == FORMAT_MIDI) {
         Mix_RegisterEffect(curChannel, Effect_MIDIGain, nullptr, nullptr);
     }
+    /*
     if (reverb) {
-        int reverbdelay = 4;
+        int reverbdelay = 50;
         int reverbcount = reverb / 8;
         // Timer ID is unfortunately unknown at this time
         reverb_info_t* info = new reverb_info_t{0, chunk, volume, reverbcount, reverbdelay, leftPan, rightPan};
         SDL_TimerID timer = SDL_AddTimer(reverbdelay, Reverb_Timer_Callback, info);
         info->timer = timer;
     }
-    // int* rvb = new int{reverb};
-    // Mix_RegisterEffect(curChannel, Effect_Reverb, Effect_Reverb_Done, rvb);
+    */
     active_channels.set(curChannel);
     if (origin) {
         sources.insert({origin, curChannel});
-        // I_Printf("I_StartSound: info refcount %d\n", info.use_count());
-        // infos.push_back(info);
     }
 }
 
