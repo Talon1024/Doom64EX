@@ -1,4 +1,4 @@
-Doom 64 EX [![Build Status](https://travis-ci.org/svkaiser/Doom64EX.svg?branch=master)](https://travis-ci.org/svkaiser/Doom64EX) [![Build status](https://ci.appveyor.com/api/projects/status/04kswu014uwrljrd/branch/master?svg=true)](https://ci.appveyor.com/project/dotfloat/doom64ex/branch/master)
+Doom 64 EX ![CMake](https://github.com/Talon1024/Doom64EX/workflows/CMake/badge.svg)
 ==========
 
 This is a modified/improved version of Doom 64 EX, with compatibility for the Doom 64 Steam rerelease. It is for:
