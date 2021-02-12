@@ -75,9 +75,7 @@ struct sndentry_t {
     audio_file_format format;
 };
 
-typedef std::variant<String, size_t> audioref;
-
-static std::unordered_map<audioref, sndentry_t> snd_entries; // Lump name/id to chunk index
+static std::unordered_map<size_t, sndentry_t> snd_entries; // Lump name/id to chunk index
 static std::vector<Mix_Chunk*> audio_chunks; // Chunks - these store raw audio data
 
 // Music names to MIDI/music lumps
@@ -186,8 +184,7 @@ static bool Audio_LoadTable() {
             SDL_RWseek(reader, audio_pos, RW_SEEK_SET);
             Mix_Chunk* chunk = Mix_LoadWAV_RW(reader, 1);
             size_t chunk_index = audio_chunks.size();
-            snd_entries.insert_or_assign(entry_index, sndentry_t{chunk_index, fmt});
-            snd_entries.insert_or_assign(iter->lump_name().to_string(), sndentry_t{chunk_index, fmt});
+            snd_entries[entry_index] = sndentry_t{chunk_index, fmt};
             audio_chunks.push_back(chunk);
             // loaded += 1;
             // I_Printf("Entry %d: %s\n", entry_index, iter->lump_name().to_string().c_str());
@@ -196,7 +193,7 @@ static bool Audio_LoadTable() {
             String data = iter->as_bytes();
             SDL_RWops* reader = SDL_RWFromConstMem(data.data(), data.size());
             Mix_Music* music = Mix_LoadMUS_RW(reader, 1);
-            musics.insert_or_assign(iter->lump_name().to_string(), music);
+            musics[iter->lump_name().to_string()] = music;
             music_count += 1;
             // loaded += 1;
         }
@@ -206,7 +203,7 @@ static bool Audio_LoadTable() {
             String data = iter->as_bytes();
             SDL_RWops* reader = SDL_RWFromConstMem(data.data(), data.size());
             Mix_Music* music = Mix_LoadMUS_RW(reader, 1);
-            musics.insert_or_assign(iter->lump_name().to_string(), music);
+            musics[iter->lump_name().to_string()] = music;
             music_count += 1;
         }
     }
@@ -336,7 +333,7 @@ void I_UpdateChannel(int c, int volume, int pan) {
 
 void I_ShutdownSound(void) {
     std::for_each(audio_chunks.begin(), audio_chunks.end(), Mix_FreeChunk);
-    std::for_each(musics.begin(), musics.end(), [](std::pair<audioref, Mix_Music*> ref) {
+    std::for_each(musics.begin(), musics.end(), [](std::pair<String, Mix_Music*> ref) {
         Mix_FreeMusic(ref.second);
     });
     Mix_CloseAudio();

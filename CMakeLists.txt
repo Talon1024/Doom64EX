@@ -118,7 +118,7 @@ if (NOT USE_CONAN)
   set(PNG_SHARED OFF)
   add_subdirectory("${CMAKE_SOURCE_DIR}/libpng")
   execute_process(
-    COMMAND patch
+    COMMAND patch -r -
     INPUT_FILE "${CMAKE_SOURCE_DIR}/dont_truncate_palettes.patch"
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/libpng"
   )
