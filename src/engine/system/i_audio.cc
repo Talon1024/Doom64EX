@@ -260,6 +260,12 @@ void I_InitSequencer() {
     return;
 }
 
+// Convert volume and panning to distance and angle
+static void TweakParams(int &volume, int &pan) {
+    pan = 360 - (pan * 360 / 255);
+    volume = 255 - volume;
+}
+
 // Channel finished callback
 static void I_ChannelFinished(int channel) {
     // I_Printf("Channel %d finished\n", channel);
@@ -321,10 +327,9 @@ void I_UpdateChannel(int c, int volume, int pan) {
     */
     // I_Printf("Updating channel %d\n", c);
     if (!active_channels[c]) { return; }
-    Uint8 leftPan = 255 - pan;
-    Uint8 rightPan = pan;
+    TweakParams(volume, pan);
     Mix_Volume(c, volume);
-    Mix_SetPanning(c, leftPan, rightPan);
+    Mix_SetPosition(c, pan, volume);
 }
 
 //
@@ -519,12 +524,14 @@ void I_StartSound(int sfx_id, sndsrc_t* origin, int volume, int pan, int reverb,
     size_t chunk_index = chuck->second.chunk_index;
     audio_file_format fmt = chuck->second.format;
     Mix_Chunk* chunk = audio_chunks[chunk_index];
-    Uint8 leftPan = 255 - pan;
-    Uint8 rightPan = pan;
+    // Uint8 leftPan = 255 - pan;
+    // Uint8 rightPan = pan;
     int loops = (flags & SFX_LOOP) ? -1 : 0;
     int curChannel = Mix_PlayChannel(-1, chunk, loops);
-    Mix_Volume(curChannel, volume);
-    Mix_SetPanning(curChannel, leftPan, rightPan);
+    // Mix_Volume(curChannel, volume);
+    // Mix_SetPanning(curChannel, leftPan, rightPan);
+    TweakParams(volume, pan);
+    Mix_SetPosition(curChannel, pan, volume);
     Mix_GroupChannel(curChannel, GROUP_GAMESOUNDS);
     if (fmt == FORMAT_MIDI) {
         Mix_RegisterEffect(curChannel, Effect_MIDIGain, nullptr, nullptr);
